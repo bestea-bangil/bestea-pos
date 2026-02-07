@@ -67,24 +67,37 @@ export function RecentSales() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {recentSales.map((sale) => (
-              <TableRow key={sale.order}>
-                <TableCell className="py-2">
-                  <div className="font-medium text-xs md:text-sm">
-                    {sale.order}
+            {recentSales.length > 0 ? (
+              recentSales.map((sale) => (
+                <TableRow key={sale.order}>
+                  <TableCell className="py-2">
+                    <div className="font-medium text-xs md:text-sm">
+                      {sale.order}
+                    </div>
+                    <div className="text-[10px] md:text-xs text-muted-foreground">
+                      {sale.name}
+                    </div>
+                  </TableCell>
+                  <TableCell className="py-2 hidden sm:table-cell">
+                    <span className="text-xs uppercase">{sale.method}</span>
+                  </TableCell>
+                  <TableCell className="py-2 text-right font-bold text-xs md:text-sm">
+                    {formatter.format(sale.amount)}
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell
+                  colSpan={3}
+                  className="text-center py-8 text-muted-foreground"
+                >
+                  <div className="flex flex-col items-center gap-2">
+                    <span className="text-sm">Belum ada transaksi</span>
                   </div>
-                  <div className="text-[10px] md:text-xs text-muted-foreground">
-                    {sale.name}
-                  </div>
-                </TableCell>
-                <TableCell className="py-2 hidden sm:table-cell">
-                  <span className="text-xs uppercase">{sale.method}</span>
-                </TableCell>
-                <TableCell className="py-2 text-right font-bold text-xs md:text-sm">
-                  {formatter.format(sale.amount)}
                 </TableCell>
               </TableRow>
-            ))}
+            )}
           </TableBody>
         </Table>
       </CardContent>

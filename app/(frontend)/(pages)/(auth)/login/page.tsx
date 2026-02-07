@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useBranch } from "@/contexts/branch-context";
+import { useEmployee } from "@/app/context/employee-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,6 +18,7 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
   const { login } = useBranch();
+  const { setActiveEmployee } = useEmployee();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,6 +28,16 @@ export default function LoginPage() {
       const result = await login(email, password);
 
       if (result.success) {
+        // Sync active employee to EmployeeContext
+        if (result.employee) {
+          setActiveEmployee({
+            id: result.employee.id,
+            name: result.employee.name,
+            role: result.employee.role,
+            branch: result.employee.branch,
+          });
+        }
+
         toast.success("Berhasil masuk!", {
           description: `Selamat datang kembali, ${result.role === "cashier" ? result.employee?.name : "Admin"}`,
         });

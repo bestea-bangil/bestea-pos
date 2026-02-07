@@ -22,10 +22,21 @@ interface StatsCardProps {
   value: string | number;
   change: number;
   icon: React.ReactNode;
+  hasData?: boolean; // Whether there's actual data to show
 }
 
-function StatsCard({ title, value, change, icon }: StatsCardProps) {
+function StatsCard({
+  title,
+  value,
+  change,
+  icon,
+  hasData = true,
+}: StatsCardProps) {
   const isPositive = change >= 0;
+  const showChange =
+    hasData &&
+    (change !== 0 || (value !== "Rp 0" && value !== "0" && value !== 0));
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -34,17 +45,21 @@ function StatsCard({ title, value, change, icon }: StatsCardProps) {
       </CardHeader>
       <CardContent>
         <div className="text-xl md:text-2xl font-bold">{value}</div>
-        <p
-          className={`text-xs flex items-center mt-1 ${isPositive ? "text-green-600" : "text-red-500"}`}
-        >
-          {isPositive ? (
-            <ArrowUpRight className="h-3 w-3 mr-1" />
-          ) : (
-            <ArrowDownRight className="h-3 w-3 mr-1" />
-          )}
-          {isPositive ? "+" : ""}
-          {change.toFixed(1)}% dari kemarin
-        </p>
+        {showChange ? (
+          <p
+            className={`text-xs flex items-center mt-1 ${isPositive ? "text-green-600" : "text-red-500"}`}
+          >
+            {isPositive ? (
+              <ArrowUpRight className="h-3 w-3 mr-1" />
+            ) : (
+              <ArrowDownRight className="h-3 w-3 mr-1" />
+            )}
+            {isPositive ? "+" : ""}
+            {change.toFixed(1)}% dari kemarin
+          </p>
+        ) : (
+          <p className="text-xs text-muted-foreground mt-1">Belum ada data</p>
+        )}
       </CardContent>
     </Card>
   );

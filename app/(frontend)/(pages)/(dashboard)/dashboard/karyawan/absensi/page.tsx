@@ -76,7 +76,13 @@ const statusConfig: Record<string, { label: string; className: string }> = {
 };
 
 export default function AdminAbsensiPage() {
-  const { attendanceRecords, addAttendanceManual, employees } = useEmployee();
+  const {
+    attendanceRecords,
+    addAttendanceManual,
+    employees: allEmployees,
+  } = useEmployee();
+  // Filter out Super Admin and Admin Cabang - only show Kasir
+  const employees = allEmployees.filter((e) => e.role === "Kasir");
   const [date, setDate] = useState<Date | undefined>(new Date());
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");

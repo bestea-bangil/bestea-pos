@@ -30,6 +30,7 @@ export function CategoryBreakdown() {
     color: COLORS[i % COLORS.length],
   }));
   const totalRevenue = branchBreakdown.reduce((acc, b) => acc + b.revenue, 0);
+  const hasData = branchBreakdown.length > 0 && totalRevenue > 0;
 
   return (
     <Card className="col-span-4 lg:col-span-3">
@@ -40,30 +41,36 @@ export function CategoryBreakdown() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        {branchBreakdown.map((item) => (
-          <div key={item.branch} className="space-y-1.5">
-            <div className="flex items-center justify-between text-xs md:text-sm">
-              <div className="flex items-center gap-2">
-                <div className={`w-2.5 h-2.5 rounded-full ${item.color}`} />
-                <span className="font-medium">{item.branch}</span>
+        {hasData ? (
+          branchBreakdown.map((item) => (
+            <div key={item.branch} className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs md:text-sm">
+                <div className="flex items-center gap-2">
+                  <div className={`w-2.5 h-2.5 rounded-full ${item.color}`} />
+                  <span className="font-medium">{item.branch}</span>
+                </div>
+                <div className="flex items-center gap-3 md:gap-4">
+                  <span className="text-muted-foreground text-xs">
+                    {item.percentage}%
+                  </span>
+                  <span className="font-bold w-20 md:w-24 text-right text-xs md:text-sm">
+                    {formatter.format(item.revenue)}
+                  </span>
+                </div>
               </div>
-              <div className="flex items-center gap-3 md:gap-4">
-                <span className="text-muted-foreground text-xs">
-                  {item.percentage}%
-                </span>
-                <span className="font-bold w-20 md:w-24 text-right text-xs md:text-sm">
-                  {formatter.format(item.revenue)}
-                </span>
+              <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                <div
+                  className={`h-full ${item.color} transition-all`}
+                  style={{ width: `${item.percentage}%` }}
+                />
               </div>
             </div>
-            <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-              <div
-                className={`h-full ${item.color} transition-all`}
-                style={{ width: `${item.percentage}%` }}
-              />
-            </div>
+          ))
+        ) : (
+          <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+            <span className="text-sm">Belum ada data penjualan</span>
           </div>
-        ))}
+        )}
 
         <div className="pt-3 border-t mt-3">
           <div className="flex items-center justify-between">

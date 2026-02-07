@@ -42,6 +42,8 @@ export interface Transaction {
   items: TransactionItem[];
   employeeId?: string;
   employeeName?: string;
+  branchName?: string;
+  cashierName?: string;
 }
 
 export const activeCategories: Category[] = [

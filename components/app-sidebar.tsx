@@ -24,6 +24,7 @@ import { NavMain } from "./nav-main";
 import { NavUser } from "./nav-user";
 import { TeamSwitcher } from "./team-switcher";
 import { useBranch } from "@/contexts/branch-context";
+import { useEmployee } from "@/app/context/employee-context";
 
 const superAdminNavItems = [
   {
@@ -203,11 +204,7 @@ const cashierNavItems = [
   },
 ];
 
-const userData = {
-  name: "Faayy",
-  email: "faayy@example.com",
-  avatar: "/avatars/shadcn.jpg",
-};
+// userData will be computed from context in AppSidebar component
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const {
@@ -219,6 +216,32 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     isBranchAdmin,
     isCashier,
   } = useBranch();
+  const { activeEmployee, employees } = useEmployee();
+
+  // Get full employee data for active user
+  const currentUser = activeEmployee
+    ? employees.find((e) => e.id === activeEmployee.id) || null
+    : null;
+
+  // Get avatar from localStorage
+  const [avatarUrl, setAvatarUrl] = React.useState("");
+  React.useEffect(() => {
+    if (activeEmployee?.id) {
+      const savedAvatar = localStorage.getItem(
+        `bestea-avatar-${activeEmployee.id}`,
+      );
+      if (savedAvatar) {
+        setAvatarUrl(savedAvatar);
+      }
+    }
+  }, [activeEmployee?.id]);
+
+  // Compute user data from activeEmployee
+  const userData = {
+    name: activeEmployee?.name || "User",
+    email: currentUser?.email || activeEmployee?.branch || "",
+    avatar: avatarUrl,
+  };
 
   // Konversi branches ke format TeamSwitcher
   const teams = branches.map((branch) => ({
@@ -244,7 +267,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   // Override jika sedang di context admin tapi bukan superadmin (seharusnya tidak terjadi jika logic benar)
   // Tapi untuk keamanan visual, kita pastikan context admin navigasinya admin
-  if (currentBranch.type === "admin" && !isSuperAdmin) {
+  if (currentBranch?.type === "admin" && !isSuperAdmin) {
     // Jika user non-superadmin masuk ke context admin, mungkin harus dibatasi atau di-redirect
     // Untuk sekarang kita biarkan logic role yang menang
   }
@@ -258,17 +281,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <NavMain items={navItems} />
       </SidebarContent>
       <SidebarFooter>
-        <NavUser
-          user={{
-            ...userData,
-            name:
-              userRole === "super_admin"
-                ? "Super Admin"
-                : userRole === "branch_admin"
-                  ? "Admin Cabang"
-                  : "Kasir",
-          }}
-        />
+        <NavUser user={userData} />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

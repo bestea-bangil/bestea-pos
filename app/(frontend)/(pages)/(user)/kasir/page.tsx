@@ -6,7 +6,10 @@ import {
   ProductVariant,
 } from "../../(dashboard)/dashboard/produk/data/mock-data-products";
 import { useProducts } from "@/app/context/product-context";
-import { useTransactions } from "@/app/context/transaction-context";
+import {
+  useTransactions,
+  Transaction as ContextTransaction,
+} from "@/app/context/transaction-context";
 // Define CartItem locally since it's POS specific for now or we could move it to a shared type file.
 // For simplicity, let's redefine it here compatible with the new Product structure.
 export interface CartItem extends Omit<Product, "variants"> {
@@ -167,7 +170,7 @@ function KasirContent() {
     router.push("/login");
   };
 
-  const { products, categories: activeCategories } = useProducts();
+  const { products, categories: activeCategories, reduceStock } = useProducts();
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -356,10 +359,18 @@ function KasirContent() {
       // Employee attribution
       employeeId: activeEmployee?.id,
       employeeName: activeEmployee?.name,
+      // Branch and cashier data for receipt
+      branchName: currentBranch?.name || "Cabang Bestea",
+      cashierName: activeEmployee?.name || "Kasir",
     };
 
     // Log transaction to Shift System
     addTransaction(newTransaction);
+
+    // Reduce stock for each product in cart
+    for (const item of cartItems) {
+      await reduceStock(item.id, item.quantity);
+    }
 
     // Auto Print Receipt if Connected
     if (isConnected) {

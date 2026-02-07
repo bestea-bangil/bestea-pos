@@ -61,8 +61,6 @@ export default function CabangPage() {
   // Form State
   const [formData, setFormData] = useState({
     name: "",
-    email: "",
-    password: "",
     address: "",
     phone: "",
   });
@@ -80,8 +78,6 @@ export default function CabangPage() {
       setEditingBranch(branch);
       setFormData({
         name: branch.name,
-        email: branch.email || "",
-        password: branch.password || "",
         address: branch.address || "",
         phone: branch.phone || "",
       });
@@ -89,8 +85,6 @@ export default function CabangPage() {
       setEditingBranch(null);
       setFormData({
         name: "",
-        email: "",
-        password: "",
         address: "",
         phone: "",
       });
@@ -239,7 +233,7 @@ export default function CabangPage() {
                       <div>
                         <p className="font-semibold text-sm">{branch.name}</p>
                         <p className="text-xs text-muted-foreground">
-                          ID: {branch.id}
+                          ID: {branch.id.slice(-4).toUpperCase()}
                         </p>
                       </div>
                     </div>

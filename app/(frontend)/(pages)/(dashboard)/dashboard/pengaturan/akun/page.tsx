@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,27 +35,49 @@ import {
   Eye,
   EyeOff,
 } from "lucide-react";
-
-// Mock user data (Super Admin)
-const mockUser = {
-  id: "USR-001",
-  name: "Super Admin",
-  email: "admin@bestea.com",
-  phone: "081234567890",
-  role: "Super Admin",
-  avatar: "",
-  createdAt: "2024-01-01",
-};
+import { useEmployee } from "@/app/context/employee-context";
+import { useBranch } from "@/contexts/branch-context";
+import { supabase } from "@/lib/supabase";
 
 export default function AkunPage() {
-  const [user, setUser] = useState(mockUser);
+  const { activeEmployee, employees, updateEmployee } = useEmployee();
+  const { userRole } = useBranch();
+
+  // Get full employee data
+  const currentUser = activeEmployee
+    ? employees.find((e) => e.id === activeEmployee.id) || null
+    : null;
+
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Form states
-  const [name, setName] = useState(user.name);
-  const [email, setEmail] = useState(user.email);
-  const [phone, setPhone] = useState(user.phone);
+  const [name, setName] = useState(currentUser?.name || "");
+  const [email, setEmail] = useState(currentUser?.email || "");
+  const [phone, setPhone] = useState(currentUser?.phone || "");
+  const [avatar, setAvatar] = useState("");
+
+  // Load avatar from localStorage on mount
+  useEffect(() => {
+    if (currentUser?.id) {
+      const savedAvatar = localStorage.getItem(
+        `bestea-avatar-${currentUser.id}`,
+      );
+      if (savedAvatar) {
+        setAvatar(savedAvatar);
+      }
+    }
+  }, [currentUser?.id]);
+
+  // Update form when currentUser changes
+  useEffect(() => {
+    if (currentUser) {
+      setName(currentUser.name);
+      setEmail(currentUser.email);
+      setPhone(currentUser.phone);
+    }
+  }, [currentUser]);
 
   // Password change states
   const [currentPassword, setCurrentPassword] = useState("");
@@ -64,10 +86,55 @@ export default function AkunPage() {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
 
-  const handleSaveProfile = () => {
-    setUser({ ...user, name, email, phone });
-    setIsEditingProfile(false);
-    toast.success("Profil berhasil diperbarui");
+  // Role display name
+  const roleDisplayName =
+    userRole === "super_admin"
+      ? "Super Admin"
+      : userRole === "branch_admin"
+        ? "Admin Cabang"
+        : "Kasir";
+
+  const handleSaveProfile = async () => {
+    if (!currentUser) return;
+    setIsSaving(true);
+
+    try {
+      // Update in Supabase
+      const { error } = await supabase
+        .from("employees")
+        .update({
+          name: name,
+          email: email,
+          phone: phone,
+        })
+        .eq("id", currentUser.id);
+
+      if (error) throw error;
+
+      // Update local context
+      await updateEmployee({
+        ...currentUser,
+        name,
+        email,
+        phone,
+      });
+
+      // Update activeEmployee in localStorage
+      const storedEmployee = localStorage.getItem("bestea-active-employee");
+      if (storedEmployee) {
+        const parsed = JSON.parse(storedEmployee);
+        parsed.name = name;
+        localStorage.setItem("bestea-active-employee", JSON.stringify(parsed));
+      }
+
+      setIsEditingProfile(false);
+      toast.success("Profil berhasil diperbarui");
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      toast.error("Gagal memperbarui profil");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleChangePassword = () => {
@@ -119,11 +186,33 @@ export default function AkunPage() {
     const reader = new FileReader();
     reader.onload = (event) => {
       const result = event.target?.result as string;
-      setUser({ ...user, avatar: result });
+      setAvatar(result);
+      // Save to localStorage for persistence
+      if (currentUser?.id) {
+        localStorage.setItem(`bestea-avatar-${currentUser.id}`, result);
+      }
       toast.success("Foto profil berhasil diperbarui");
     };
     reader.readAsDataURL(file);
   };
+
+  // Generate initials from name
+  const getInitials = (name: string) => {
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
+  if (!currentUser) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <p className="text-muted-foreground">Memuat data pengguna...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -151,12 +240,9 @@ export default function AkunPage() {
                   className="h-24 w-24 cursor-pointer hover:opacity-80 transition-opacity"
                   onClick={handleAvatarClick}
                 >
-                  <AvatarImage src={user.avatar} />
+                  <AvatarImage src={avatar} />
                   <AvatarFallback className="text-2xl bg-green-100 text-green-700">
-                    {user.name
-                      .split(" ")
-                      .map((n) => n[0])
-                      .join("")}
+                    {getInitials(currentUser.name)}
                   </AvatarFallback>
                 </Avatar>
                 <Button
@@ -169,12 +255,12 @@ export default function AkunPage() {
                 </Button>
               </div>
             </div>
-            <CardTitle>{user.name}</CardTitle>
-            <CardDescription>{user.email}</CardDescription>
+            <CardTitle>{currentUser.name}</CardTitle>
+            <CardDescription>{currentUser.email}</CardDescription>
             <div className="flex justify-center mt-2">
               <Badge className="bg-green-100 text-green-700 border-green-200">
                 <Shield className="mr-1 h-3 w-3" />
-                {user.role}
+                {roleDisplayName}
               </Badge>
             </div>
           </CardHeader>
@@ -183,11 +269,11 @@ export default function AkunPage() {
             <div className="space-y-3 text-sm">
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Phone className="h-4 w-4" />
-                <span>{user.phone}</span>
+                <span>{currentUser.phone || "-"}</span>
               </div>
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Mail className="h-4 w-4" />
-                <span>{user.email}</span>
+                <span>{currentUser.email}</span>
               </div>
             </div>
           </CardContent>
@@ -256,9 +342,9 @@ export default function AkunPage() {
                       variant="outline"
                       onClick={() => {
                         setIsEditingProfile(false);
-                        setName(user.name);
-                        setEmail(user.email);
-                        setPhone(user.phone);
+                        setName(currentUser.name);
+                        setEmail(currentUser.email);
+                        setPhone(currentUser.phone);
                       }}
                     >
                       Batal
@@ -269,15 +355,21 @@ export default function AkunPage() {
                 <div className="space-y-4">
                   <div className="grid grid-cols-3 gap-2 text-sm">
                     <span className="text-muted-foreground">Nama</span>
-                    <span className="col-span-2 font-medium">{user.name}</span>
+                    <span className="col-span-2 font-medium">
+                      {currentUser.name}
+                    </span>
                   </div>
                   <div className="grid grid-cols-3 gap-2 text-sm">
                     <span className="text-muted-foreground">Email</span>
-                    <span className="col-span-2 font-medium">{user.email}</span>
+                    <span className="col-span-2 font-medium">
+                      {currentUser.email}
+                    </span>
                   </div>
                   <div className="grid grid-cols-3 gap-2 text-sm">
                     <span className="text-muted-foreground">No. Telepon</span>
-                    <span className="col-span-2 font-medium">{user.phone}</span>
+                    <span className="col-span-2 font-medium">
+                      {currentUser.phone || "-"}
+                    </span>
                   </div>
                 </div>
               )}

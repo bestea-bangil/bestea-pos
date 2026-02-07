@@ -77,7 +77,9 @@ import { useEmployee } from "@/app/context/employee-context";
 // ... constants ...
 
 export default function ShiftPage() {
-  const { employees } = useEmployee();
+  const { employees: allEmployees } = useEmployee();
+  // Filter out Super Admin and Admin Cabang - only show Kasir in shift schedule
+  const employees = allEmployees.filter((e) => e.role === "Kasir");
   // Default to index 4 (Current Week) since we generated -4 to 4
   const [currentWeek, setCurrentWeek] = useState(availableWeeks[4]);
 

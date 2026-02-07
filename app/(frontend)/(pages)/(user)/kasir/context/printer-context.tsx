@@ -226,14 +226,19 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
       encoder.size("normal");
       encoder.bold(false);
       encoder.line("Fresh Tea & Good Vibes");
-      encoder.line("Cabang Bangil");
-      encoder.line("Jl. A. Yani No. 45, Bangil");
+      // Use dynamic branch name from transaction
+      encoder.line(transaction.branchName || "Cabang Bestea");
+      encoder.line("Jl. A. Yani No. 45");
       encoder.separator();
 
       // Transaction Info / Metadata
       encoder.align("left");
       encoder.line(`No    : ${transaction.id}`);
-      encoder.line(`Tgl   : ${transaction.date} ${transaction.time}`);
+      encoder.line(`Tgl   : ${transaction.date} ${transaction.time || ""}`);
+      // Add cashier name
+      if (transaction.cashierName) {
+        encoder.line(`Kasir : ${transaction.cashierName}`);
+      }
       encoder.line(
         `Bayar : ${transaction.paymentMethod === "qris" ? "QRIS" : "Tunai"}`,
       );

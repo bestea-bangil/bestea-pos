@@ -51,8 +51,14 @@ const MONTH_MAP: Record<string, string> = {
 };
 
 export default function PayrollPage() {
-  const { employees, payrollRecords, markPayrollPaid, addPayroll } =
-    useEmployee();
+  const {
+    employees: allEmployees,
+    payrollRecords,
+    markPayrollPaid,
+    addPayroll,
+  } = useEmployee();
+  // Filter out Super Admin and Admin Cabang - only show Kasir
+  const employees = allEmployees.filter((e) => e.role === "Kasir");
   const [searchQuery, setSearchQuery] = useState("");
   const [monthFilter, setMonthFilter] = useState("Januari");
 
