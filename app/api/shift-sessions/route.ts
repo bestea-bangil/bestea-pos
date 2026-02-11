@@ -47,7 +47,6 @@ export async function GET(request: Request) {
 
     return NextResponse.json(data);
   } catch (error: any) {
-    console.error("Error fetching shift sessions:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
@@ -86,7 +85,6 @@ export async function POST(request: Request) {
     if (error) throw error;
     return NextResponse.json(data);
   } catch (error: any) {
-    console.error("Error creating shift session:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
@@ -116,7 +114,6 @@ export async function PUT(request: Request) {
     if (error) throw error;
     return NextResponse.json(data);
   } catch (error: any) {
-    console.error("Error closing shift session:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

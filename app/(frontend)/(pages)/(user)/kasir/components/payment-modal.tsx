@@ -58,7 +58,10 @@ export function PaymentModal({
   };
 
   useEffect(() => {
-    if (!isOpen) {
+    if (isOpen) {
+      setAmountPaid(formatNumber(total.toString()));
+      setIsSuccess(false);
+    } else {
       setAmountPaid("");
       setPaymentMethod("cash");
       setIsSuccess(false);
@@ -199,18 +202,25 @@ export function PaymentModal({
             </div>
 
             <div className="grid grid-cols-3 gap-2">
-              {uniqueQuickAmounts.map((amt) => (
-                <Button
-                  key={amt}
-                  variant="outline"
-                  className="h-10 text-xs font-bold border-slate-200 hover:border-slate-900 hover:bg-slate-50"
-                  onClick={() => handleQuickPay(amt)}
-                >
-                  {amt === total
-                    ? "Pas"
-                    : formatter.format(amt).replace("Rp", "").trim()}
-                </Button>
-              ))}
+              {uniqueQuickAmounts.map((amt) => {
+                const isSelected = parseNumber(amountPaid) === amt;
+                return (
+                  <Button
+                    key={amt}
+                    variant="outline"
+                    className={`h-10 text-xs font-bold transition-all ${
+                      isSelected
+                        ? "border-green-500 bg-green-50 text-green-700 hover:bg-green-100 hover:border-green-600 hover:text-green-800 ring-1 ring-green-500"
+                        : "border-slate-200 hover:border-slate-900 hover:bg-slate-50 text-slate-700"
+                    }`}
+                    onClick={() => handleQuickPay(amt)}
+                  >
+                    {amt === total
+                      ? "Pas"
+                      : formatter.format(amt).replace("Rp", "").trim()}
+                  </Button>
+                );
+              })}
             </div>
 
             <div

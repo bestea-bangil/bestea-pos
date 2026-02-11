@@ -59,8 +59,8 @@ export default function LoginPage() {
             <Image
               src="/logo/bestea-logo.png"
               alt="Logo Bestea POS"
-              width={60}
-              height={60}
+              width={66}
+              height={66}
               className="h-12 w-auto"
             />
           </div>

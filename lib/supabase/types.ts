@@ -24,6 +24,8 @@ export interface Employee {
   base_salary: number;
   hourly_rate: number;
   pin?: string;
+  password_hash?: string;
+  avatar_url?: string;
   created_at: string;
   updated_at: string;
 }

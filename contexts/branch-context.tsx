@@ -28,6 +28,7 @@ export interface Employee {
   email?: string;
   pin?: string;
   branchId?: string;
+  avatar_url?: string;
 }
 
 interface BranchContextType {
@@ -72,7 +73,7 @@ interface BranchContextType {
   // Employee Management
   employees: Employee[];
   refreshEmployees: () => Promise<void>;
-  verifyPin: (pin: string) => Promise<Employee | null>;
+  verifyPassword: (password: string) => Promise<Employee | null>;
 }
 
 const AUTH_KEY = "bestea-auth-session";
@@ -228,8 +229,6 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
   const login = React.useCallback(
     async (email: string, pass: string) => {
       try {
-        console.log("[Login] Attempting login via API for:", email);
-
         const response = await fetch("/api/auth/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -243,8 +242,6 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
         }
 
         const { role, employee, branches: employeeBranches } = result;
-
-        console.log("[Login] API Success:", { role, employee });
 
         // Logic to determine branch
         let branch: Branch | null = null;
@@ -288,6 +285,7 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
             branch: branch.name,
             branchId: branch.id,
             email: employee.email,
+            avatar_url: employee.avatar_url,
           };
           setActiveEmployee(empData);
 
@@ -395,25 +393,54 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
     try {
       const res = await fetch("/api/employees");
       if (res.ok) {
-        const data = await res.json();
+        const data: Employee[] = await res.json();
         setEmployees(data);
+
+        // Sync activeEmployee with latest data from DB
+        const storedEmp = localStorage.getItem("bestea-active-employee");
+        if (storedEmp) {
+          const parsed = JSON.parse(storedEmp);
+          const latest = data.find((e) => e.id === parsed.id);
+          if (latest) {
+            const updated = {
+              ...parsed,
+              name: latest.name,
+              email: latest.email,
+              avatar_url: latest.avatar_url,
+              role: latest.role,
+              branch: latest.branch,
+            };
+
+            // Compare to see if we need to update
+            if (JSON.stringify(updated) !== storedEmp) {
+              setActiveEmployee(updated);
+              localStorage.setItem(
+                "bestea-active-employee",
+                JSON.stringify(updated),
+              );
+            } else if (!activeEmployee) {
+              // If state is null but localStorage has it (e.g. first load)
+              setActiveEmployee(updated);
+            }
+          }
+        }
       }
     } catch (e) {
       console.error("Failed to fetch employees", e);
     }
-  }, []);
+  }, [activeEmployee]);
 
   React.useEffect(() => {
     fetchEmployees();
   }, [fetchEmployees]);
 
-  const verifyPin = React.useCallback(
-    async (pin: string): Promise<Employee | null> => {
+  const verifyPassword = React.useCallback(
+    async (password: string): Promise<Employee | null> => {
       try {
         const res = await fetch("/api/auth/verify-pin", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pin }),
+          body: JSON.stringify({ password }),
         });
 
         if (res.ok) {
@@ -422,7 +449,7 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
         }
         return null;
       } catch (e) {
-        console.error("Verify PIN error", e);
+        console.error("Verify Password error", e);
         return null;
       }
     },
@@ -464,7 +491,7 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
       clockOut,
       employees,
       refreshEmployees: fetchEmployees,
-      verifyPin,
+      verifyPassword,
     }),
     [
       currentBranch,
@@ -484,7 +511,7 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
       clockOut,
       employees,
       fetchEmployees,
-      verifyPin,
+      verifyPassword,
     ],
   );
 

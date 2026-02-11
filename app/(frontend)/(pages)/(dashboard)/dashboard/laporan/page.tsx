@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { usePathname } from "next/navigation";
 import {
   Select,
   SelectContent,
@@ -20,6 +21,7 @@ import { useBranch } from "@/contexts/branch-context";
 // We pass period to API.
 
 export default function LaporanPage() {
+  const pathname = usePathname();
   const { branches, isCashier } = useBranch();
   const [selectedBranch, setSelectedBranch] = useState("all");
   const [dateRange, setDateRange] = useState("today");
@@ -58,7 +60,7 @@ export default function LaporanPage() {
 
   useEffect(() => {
     fetchReports();
-  }, [fetchReports]);
+  }, [fetchReports, pathname]);
 
   const handleAddExpense = async (expenseData: {
     category: string;
@@ -253,7 +255,6 @@ export default function LaporanPage() {
           <ReportSummary
             omzet={data.summary.omzet}
             expenses={data.summary.expenses}
-            transactions={data.summary.transactions}
           />
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

@@ -11,6 +11,7 @@ import {
   endOfYear,
   subDays,
 } from "date-fns";
+import { getJakartaDate, getJakartaYYYYMMDD } from "@/lib/date-utils";
 
 export const dynamic = 'force-dynamic';
 
@@ -31,48 +32,60 @@ export async function GET(request: Request) {
     const branchId = searchParams.get("branchId");
     const period = searchParams.get("period") || "today";
 
-    const now = new Date();
-    let start: Date, end: Date;
+    const WIB_OFFSET = 7 * 60 * 60 * 1000;
+    // Use getJakartaDate for base time, but keep WIB_OFFSET logic for manual adjustments if needed
+    // Actually, getJakartaDate() returns a Date object shifted to Jakarta time (but still standard Date).
+    // The previous logic used `nowWIB` manually. 
+    // Let's stick to the existing manual offset logic but base it on a consistent `now`.
+    
+    const now = new Date(); // UTC system time
+    const nowWIB = new Date(now.getTime() + WIB_OFFSET);
 
-    // 1. Calculate Date Range
+    let startLocal: Date, endLocal: Date;
+
+    // 1. Calculate Date Range (Local WIB)
     switch (period) {
       case "today":
-        start = startOfDay(now);
-        end = endOfDay(now);
+        startLocal = startOfDay(nowWIB);
+        endLocal = endOfDay(nowWIB);
         break;
       case "yesterday":
-        const yesterday = subDays(now, 1);
-        start = startOfDay(yesterday);
-        end = endOfDay(yesterday);
+        const yesterdayWIB = subDays(nowWIB, 1);
+        startLocal = startOfDay(yesterdayWIB);
+        endLocal = endOfDay(yesterdayWIB);
         break;
       case "this_week":
-        start = startOfWeek(now, { weekStartsOn: 1 });
-        end = endOfWeek(now, { weekStartsOn: 1 });
+        startLocal = startOfWeek(nowWIB, { weekStartsOn: 1 });
+        endLocal = endOfWeek(nowWIB, { weekStartsOn: 1 });
         break;
       case "this_month":
-        start = startOfMonth(now);
-        end = endOfMonth(now);
+        startLocal = startOfMonth(nowWIB);
+        endLocal = endOfMonth(nowWIB);
         break;
       case "this_year":
-        start = startOfYear(now);
-        end = endOfYear(now);
+        startLocal = startOfYear(nowWIB);
+        endLocal = endOfYear(nowWIB);
         break;
       case "7d":
-        start = startOfDay(subDays(now, 7));
-        end = endOfDay(now);
+        startLocal = startOfDay(subDays(nowWIB, 7));
+        endLocal = endOfDay(nowWIB);
         break;
       case "14d":
-        start = startOfDay(subDays(now, 14));
-        end = endOfDay(now);
+        startLocal = startOfDay(subDays(nowWIB, 14));
+        endLocal = endOfDay(nowWIB);
         break;
       case "30d":
-        start = startOfDay(subDays(now, 30));
-        end = endOfDay(now);
+        startLocal = startOfDay(subDays(nowWIB, 30));
+        endLocal = endOfDay(nowWIB);
         break;
       default:
-        start = startOfDay(now);
-        end = endOfDay(now);
+        startLocal = startOfDay(nowWIB);
+        endLocal = endOfDay(nowWIB);
     }
+
+    // Convert local WIB boundaries back to UTC ISO for database query
+    const start = new Date(startLocal.getTime() - WIB_OFFSET);
+    const end = new Date(endLocal.getTime() - WIB_OFFSET);
 
     // 2. Fetch Transactions for the period
     let query = supabase
@@ -103,20 +116,23 @@ export async function GET(request: Request) {
     const { data: expenses, error: expError } = await expenseQuery;
     if (expError) throw expError;
 
-    // 4. Calculate Previous Period (for Growth)
-    let prevStart: Date, prevEnd: Date;
+    // 4. Calculate Previous Period (for Growth) - using local boundaries
+    let prevStartLocal: Date, prevEndLocal: Date;
     if (period === "today") {
-         prevStart = startOfDay(subDays(now, 1));
-         prevEnd = endOfDay(subDays(now, 1));
+         prevStartLocal = startOfDay(subDays(nowWIB, 1));
+         prevEndLocal = endOfDay(subDays(nowWIB, 1));
     } else if (period === "yesterday") {
-         prevStart = startOfDay(subDays(now, 2));
-         prevEnd = endOfDay(subDays(now, 2));
+         prevStartLocal = startOfDay(subDays(nowWIB, 2));
+         prevEndLocal = endOfDay(subDays(nowWIB, 2));
     } else {
          // Fallback: previous period of same duration
-         const duration = end.getTime() - start.getTime();
-         prevEnd = new Date(start.getTime() - 1);
-         prevStart = new Date(prevEnd.getTime() - duration);
+         const duration = endLocal.getTime() - startLocal.getTime();
+         prevEndLocal = new Date(startLocal.getTime() - 1);
+         prevStartLocal = new Date(prevEndLocal.getTime() - duration);
     }
+
+    const prevStart = new Date(prevStartLocal.getTime() - WIB_OFFSET);
+    const prevEnd = new Date(prevEndLocal.getTime() - WIB_OFFSET);
 
     let prevQuery = supabase
       .from("transactions")
@@ -199,6 +215,7 @@ export async function GET(request: Request) {
             id: t.id,
             totalAmount: t.total_amount,
             paymentMethod: t.payment_method,
+            transactionCode: t.transaction_code,
             items: [], 
         }));
 
@@ -218,17 +235,26 @@ export async function GET(request: Request) {
     // 7. Chart Data (Daily Breakdown)
     const chartMap = new Map<string, { date: string; tunai: number; qris: number }>();
     
-    // Initialize with all dates in range
-    // We iterate from start to end
-    let currentDate = new Date(start);
-    while (currentDate <= end) {
-        const dateKey = currentDate.toISOString().split('T')[0];
-        chartMap.set(dateKey, { date: dateKey, tunai: 0, qris: 0 });
-        currentDate.setDate(currentDate.getDate() + 1);
+    // Initialize with all dates in range (using Local WIB dates)
+    let currentDate = new Date(startLocal);
+    // Ensure we cover the entire range up to endLocal
+    // Use a safer iteration by checking the date string
+    const endDateStr = getJakartaYYYYMMDD(endLocal);
+    let currentIterDate = new Date(startLocal);
+    
+    while (true) {
+        const dateKey = getJakartaYYYYMMDD(currentIterDate);
+        if (!chartMap.has(dateKey)) {
+            chartMap.set(dateKey, { date: dateKey, tunai: 0, qris: 0 });
+        }
+        if (dateKey === endDateStr) break;
+        currentIterDate.setDate(currentIterDate.getDate() + 1);
+        if (chartMap.size > 40) break; // Safety break
     }
 
     transactions?.forEach(t => {
-        const dateKey = t.created_at.split('T')[0]; // YYYY-MM-DD
+        const dateKey = getJakartaYYYYMMDD(new Date(t.created_at));
+        
         if (chartMap.has(dateKey)) {
              const entry = chartMap.get(dateKey)!;
              if (t.payment_method === 'cash') {
@@ -236,8 +262,10 @@ export async function GET(request: Request) {
              } else {
                  entry.qris += t.total_amount;
              }
+        } else {
         }
     });
+
     const chartData = Array.from(chartMap.values()).sort((a, b) => a.date.localeCompare(b.date));
 
     // 8. Branch Performance
@@ -276,7 +304,6 @@ export async function GET(request: Request) {
     });
 
   } catch (error) {
-    console.error("[API Stats] Error:", error);
     return NextResponse.json(
       { error: "Failed to fetch dashboard stats" },
       { status: 500 }

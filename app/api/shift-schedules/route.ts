@@ -44,17 +44,14 @@ export async function GET(request: NextRequest) {
       query = query.eq("employee_id", employeeId);
     }
 
-    console.log("[API Shift] Fetching schedules with params:", { weekStart, branchId, employeeId });
 
     const { data, error } = await query;
     
-    console.log("[API Shift] Found rows:", data?.length, data);
 
     if (error) throw error;
 
     return NextResponse.json(data);
   } catch (error: any) {
-    console.error("Error fetching shift schedules:", error);
     return NextResponse.json(
       { error: error.message || "Failed to fetch shift schedules" },
       { status: 500 }
@@ -99,7 +96,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(data);
   } catch (error: any) {
-    console.error("Error saving shift schedule:", error);
     return NextResponse.json(
       { error: error.message || "Failed to save shift schedule" },
       { status: 500 }
@@ -145,7 +141,6 @@ export async function PUT(request: NextRequest) {
         .single();
 
       if (error) {
-        console.error("Error upserting schedule:", error);
       } else {
         results.push(data);
       }
@@ -153,7 +148,6 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({ updated: results.length, data: results });
   } catch (error: any) {
-    console.error("Error bulk updating shift schedules:", error);
     return NextResponse.json(
       { error: error.message || "Failed to bulk update shift schedules" },
       { status: 500 }
@@ -183,7 +177,6 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
-    console.error("Error deleting shift schedule:", error);
     return NextResponse.json(
       { error: error.message || "Failed to delete shift schedule" },
       { status: 500 }

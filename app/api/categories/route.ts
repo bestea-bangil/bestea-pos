@@ -19,7 +19,7 @@ export async function GET() {
     const { data: categories, error } = await supabase
       .from("categories")
       .select("*")
-      .order("name");
+      .order("name", { ascending: false });
 
     if (error) throw error;
 
@@ -56,5 +56,40 @@ export async function POST(request: Request) {
     return NextResponse.json(data);
   } catch (error) {
      return NextResponse.json({ error: "Failed to create category" }, { status: 500 });
+  }
+}
+
+export async function PUT(request: Request) {
+  try {
+    const body = await request.json();
+    const { id, name, description } = body;
+
+    const { data, error } = await supabase
+      .from("categories")
+      .update({ name, description })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return NextResponse.json(data);
+  } catch (error) {
+    return NextResponse.json({ error: "Failed to update category" }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get("id");
+
+    if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
+
+    const { error } = await supabase.from("categories").delete().eq("id", id);
+    if (error) throw error;
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    return NextResponse.json({ error: "Failed to delete category" }, { status: 500 });
   }
 }

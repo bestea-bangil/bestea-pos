@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { usePathname } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
+
 import {
   Select,
   SelectContent,
@@ -51,7 +52,8 @@ interface Product {
   id: string;
   name: string;
   category: string;
-  price: number;
+  categoryId?: string | null;
+  price: number | null;
   trackStock: boolean;
   stock: number;
   image: string;
@@ -66,6 +68,7 @@ interface Category {
 }
 
 export default function ProductPage() {
+  const pathname = usePathname();
   // State
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -80,9 +83,12 @@ export default function ProductPage() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const [formData, setFormData] = useState<Omit<Product, "id">>({
+  const [formData, setFormData] = useState<
+    Omit<Product, "id" | "price"> & { price: number | "" }
+  >({
     name: "",
     category: "",
+    categoryId: "",
     price: 0,
     trackStock: true,
     stock: 0,
@@ -96,8 +102,8 @@ export default function ProductPage() {
     setIsLoading(true);
     try {
       const [prodRes, catRes] = await Promise.all([
-        fetch("/api/products"),
-        fetch("/api/categories"),
+        fetch("/api/products", { cache: "no-store" }),
+        fetch("/api/categories", { cache: "no-store" }),
       ]);
 
       if (prodRes.ok) {
@@ -118,7 +124,7 @@ export default function ProductPage() {
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+  }, [fetchData, pathname]);
 
   // Filter Logic
   const filteredProducts = products.filter((prod) => {
@@ -142,7 +148,8 @@ export default function ProductPage() {
       setFormData({
         name: prod.name,
         category: prod.category,
-        price: prod.price,
+        categoryId: prod.categoryId,
+        price: prod.price !== null ? prod.price : "",
         trackStock: prod.trackStock !== undefined ? prod.trackStock : true,
         stock: prod.stock,
         status: prod.status,
@@ -153,7 +160,8 @@ export default function ProductPage() {
       setEditingProduct(null);
       setFormData({
         name: "",
-        category: categories[0]?.name || "",
+        category: "",
+        categoryId: "",
         price: 0,
         trackStock: true,
         stock: 0,
@@ -166,17 +174,42 @@ export default function ProductPage() {
   };
 
   const handleSave = async () => {
-    if (!formData.name || !formData.category) {
+    if (!formData.name || !formData.categoryId) {
       toast.error("Nama dan Kategori wajib diisi");
       return;
+    }
+
+    // Prepare payload
+    const payload = {
+      ...formData,
+      price: formData.price === "" ? null : Number(formData.price),
+    };
+
+    // Check if editing and no changes
+    if (editingProduct) {
+      const isUnchanged =
+        payload.name === editingProduct.name &&
+        payload.categoryId === editingProduct.categoryId &&
+        payload.price === editingProduct.price &&
+        payload.trackStock === editingProduct.trackStock &&
+        payload.stock === editingProduct.stock &&
+        payload.status === editingProduct.status &&
+        payload.image === editingProduct.image &&
+        JSON.stringify(payload.variants) ===
+          JSON.stringify(editingProduct.variants); // Simple comparison for variants
+
+      if (isUnchanged) {
+        setIsModalOpen(false);
+        return;
+      }
     }
 
     try {
       const url = "/api/products";
       const method = editingProduct ? "PUT" : "POST";
       const body = editingProduct
-        ? { ...formData, id: editingProduct.id }
-        : formData;
+        ? { ...payload, id: editingProduct.id }
+        : payload;
 
       const res = await fetch(url, {
         method,
@@ -217,7 +250,8 @@ export default function ProductPage() {
     }
   };
 
-  const formatCurrency = (val: number) => {
+  const formatCurrency = (val: number | null | undefined) => {
+    if (val === null || val === undefined) return "-";
     return new Intl.NumberFormat("id-ID", {
       style: "currency",
       currency: "IDR",
@@ -302,10 +336,10 @@ export default function ProductPage() {
                 {paginatedProducts.map((prod) => (
                   <Card
                     key={prod.id}
-                    className="overflow-hidden hover:shadow-md transition-shadow"
+                    className="group overflow-hidden border-slate-200 shadow-sm hover:shadow-lg hover:border-green-200 transition-all duration-300 flex flex-col bg-white"
                   >
-                    {/* Product Image */}
-                    <div className="h-40 bg-slate-100 flex items-center justify-center relative">
+                    {/* Product Image Area */}
+                    <div className="relative aspect-square bg-slate-50 overflow-hidden">
                       {prod.image ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -314,92 +348,142 @@ export default function ProductPage() {
                           className="h-full w-full object-cover"
                         />
                       ) : (
-                        <ImageIcon className="h-12 w-12 text-slate-300" />
+                        <div className="h-full w-full flex items-center justify-center text-slate-300">
+                          <ImageIcon className="h-16 w-16" />
+                        </div>
                       )}
-                      {/* Status Badge */}
-                      <div className="absolute top-2 right-2">
+
+                      {/* Floating Status Badge */}
+                      <div className="absolute top-3 right-3">
                         {prod.status === "active" ? (
-                          <Badge className="bg-green-100 text-green-700 border-none hover:bg-green-100">
-                            Aktif
-                          </Badge>
+                          <div className="bg-white/95 backdrop-blur-sm px-2.5 py-1 rounded-full text-[10px] font-bold text-green-700 shadow-sm flex items-center gap-1.5 border border-green-100">
+                            <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                            AKTIF
+                          </div>
                         ) : (
-                          <Badge variant="secondary">Arsip</Badge>
+                          <div className="bg-slate-900/90 backdrop-blur-sm px-2.5 py-1 rounded-full text-[10px] font-bold text-white shadow-sm flex items-center gap-1.5">
+                            ARSIP
+                          </div>
                         )}
                       </div>
                     </div>
 
-                    {/* Product Info */}
-                    <CardContent className="p-4 space-y-3">
+                    {/* Content */}
+                    <CardContent className="p-4 flex-1 flex flex-col gap-3">
                       <div>
-                        <h3 className="font-semibold text-sm line-clamp-1">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-[10px] uppercase tracking-wider font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-sm">
+                            {prod.category}
+                          </span>
+                        </div>
+                        <h3
+                          className="font-bold text-slate-900 text-base leading-tight line-clamp-2 min-h-[2.5rem] group-hover:text-green-700 transition-colors"
+                          title={prod.name}
+                        >
                           {prod.name}
                         </h3>
-                        <Badge
-                          variant="outline"
-                          className="bg-slate-50 mt-1 text-xs"
-                        >
-                          {prod.category}
-                        </Badge>
                       </div>
 
-                      {/* Variants */}
-                      {prod.variants && prod.variants.length > 0 ? (
-                        <div className="space-y-1">
-                          <p className="text-xs text-muted-foreground font-medium">
-                            Varian:
-                          </p>
-                          <div className="flex flex-wrap gap-1">
-                            {prod.variants.map((v, i) => (
-                              <Badge
-                                key={i}
-                                variant="outline"
-                                className="text-xs bg-blue-50 text-blue-700 border-blue-200"
+                      <div className="mt-auto space-y-4">
+                        {/* Price & Variants Indicator */}
+                        {/* Price & Variants List */}
+                        <div className="space-y-1.5 pb-3 border-b border-slate-50">
+                          {/* Base Price */}
+                          {prod.price !== null && prod.price > 0 && (
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm font-medium text-slate-600">
+                                Dasar
+                              </span>
+                              <span className="text-sm font-bold text-green-700">
+                                {formatCurrency(prod.price)}
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Variants */}
+                          {prod.variants && prod.variants.length > 0
+                            ? prod.variants.map((v, i) => (
+                                <div
+                                  key={i}
+                                  className="flex justify-between items-center"
+                                >
+                                  <span className="text-xs text-slate-500">
+                                    {v.name}
+                                  </span>
+                                  <span className="text-xs font-semibold text-slate-700">
+                                    {formatCurrency(v.price)}
+                                  </span>
+                                </div>
+                              ))
+                            : // Show 0 if no price and no variants
+                              (!prod.price || prod.price === 0) && (
+                                <span className="text-lg font-bold text-green-700">
+                                  {formatCurrency(0)}
+                                </span>
+                              )}
+                        </div>
+
+                        {/* Stock Indicator */}
+                        {prod.trackStock ? (
+                          <div className="space-y-1.5">
+                            <div className="flex justify-between text-xs">
+                              <span className="text-slate-500 font-medium">
+                                Stok Tersedia
+                              </span>
+                              <span
+                                className={`font-bold ${
+                                  prod.stock < 10
+                                    ? "text-red-500"
+                                    : "text-slate-700"
+                                }`}
                               >
-                                {v.name}: {formatCurrency(v.price)}
-                              </Badge>
-                            ))}
+                                {prod.stock} unit
+                              </span>
+                            </div>
+                            {/* Simple Progress Bar visual */}
+                            <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all duration-500 ${
+                                  prod.stock < 10
+                                    ? "bg-red-500 w-full"
+                                    : "bg-green-500"
+                                }`}
+                                style={{
+                                  width:
+                                    prod.stock < 10
+                                      ? "100%"
+                                      : `${Math.min(100, (prod.stock / 50) * 100)}%`,
+                                }}
+                              />
+                            </div>
                           </div>
-                        </div>
-                      ) : (
-                        <div className="text-sm font-semibold text-green-600">
-                          {formatCurrency(prod.price)}
-                        </div>
-                      )}
+                        ) : (
+                          <div className="flex items-center gap-2 text-xs font-semibold text-blue-600 bg-blue-50 px-3 py-2 rounded-lg w-full">
+                            <Package className="w-3.5 h-3.5" />
+                            Stok Unlimited
+                          </div>
+                        )}
 
-                      {/* Stock */}
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">Stok:</span>
-                        <span
-                          className={`font-semibold ${
-                            !prod.trackStock
-                              ? "text-blue-600"
-                              : prod.stock < 10
-                                ? "text-red-600"
-                                : "text-slate-700"
-                          }`}
-                        >
-                          {prod.trackStock ? prod.stock : "Unlimited"}
-                        </span>
-                      </div>
-
-                      {/* Actions */}
-                      <div className="flex gap-2 pt-2 border-t">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="flex-1"
-                          onClick={() => handleOpenModal(prod)}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                          onClick={() => setDeleteId(prod.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        {/* Actions */}
+                        <div className="grid grid-cols-2 gap-2 pt-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-9 text-xs font-medium hover:bg-slate-50 hover:text-slate-900 border-slate-200"
+                            onClick={() => handleOpenModal(prod)}
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-9 text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50"
+                            onClick={() => setDeleteId(prod.id)}
+                          >
+                            <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                            Hapus
+                          </Button>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
@@ -468,17 +552,22 @@ export default function ProductPage() {
               <div className="grid gap-2">
                 <Label htmlFor="category">Kategori</Label>
                 <Select
-                  value={formData.category}
-                  onValueChange={(val) =>
-                    setFormData({ ...formData, category: val })
-                  }
+                  value={formData.categoryId || ""}
+                  onValueChange={(val) => {
+                    const selectedCat = categories.find((c) => c.id === val);
+                    setFormData({
+                      ...formData,
+                      categoryId: val,
+                      category: selectedCat?.name || "",
+                    });
+                  }}
                 >
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Pilih Kategori" />
                   </SelectTrigger>
                   <SelectContent position="popper">
                     {categories.map((cat) => (
-                      <SelectItem key={cat.id} value={cat.name}>
+                      <SelectItem key={cat.id} value={cat.id}>
                         {cat.name}
                       </SelectItem>
                     ))}
@@ -557,9 +646,11 @@ export default function ProductPage() {
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      price: parseInt(e.target.value),
+                      price:
+                        e.target.value === "" ? "" : parseInt(e.target.value),
                     })
                   }
+                  placeholder="Opsional jika ada varian"
                 />
               </div>
 
@@ -614,7 +705,9 @@ export default function ProductPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  const newVariant = { name: "", price: formData.price };
+                  const basePrice =
+                    typeof formData.price === "number" ? formData.price : 0;
+                  const newVariant = { name: "", price: basePrice };
                   setFormData({
                     ...formData,
                     variants: [...(formData.variants || []), newVariant],

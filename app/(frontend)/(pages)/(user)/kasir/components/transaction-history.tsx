@@ -118,7 +118,7 @@ export function TransactionHistory({
                     <div className="flex justify-between items-start mb-3">
                       <div>
                         <div className="font-bold text-slate-800 group-hover:text-green-700 transition-colors">
-                          {trx.id}
+                          {trx.transactionCode || trx.id}
                         </div>
                         <div className="flex items-center text-xs text-muted-foreground mt-1 gap-2">
                           <span className="flex items-center gap-1">

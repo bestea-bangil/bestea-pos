@@ -57,6 +57,16 @@ import { id } from "date-fns/locale/id";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { useBranch } from "@/contexts/branch-context";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 // Local Types
 interface AttendanceRecord {
@@ -114,6 +124,7 @@ export default function AdminAbsensiPage() {
   const [date, setDate] = useState<Date | undefined>(new Date());
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [roleFilter, setRoleFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
@@ -135,12 +146,9 @@ export default function AdminAbsensiPage() {
       // Fetch Employees (to show "Belum Hadir" list)
       const employeesRes = await fetch("/api/employees");
       const employeesData = await employeesRes.json();
-      // API returns formatted role: "Kasir", "Admin Cabang", "Super Admin"
-      const filteredEmployees = employeesData.filter(
-        (e: any) => e.role === "Kasir",
-      );
-
-      setEmployees(filteredEmployees);
+      // Filter: Only Cashiers
+      const cashiersOnly = employeesData.filter((e: any) => e.role === "Kasir");
+      setEmployees(cashiersOnly);
 
       // Fetch Attendance for selected date
       let url = `/api/attendance?date=${dateStr}`;
@@ -193,6 +201,9 @@ export default function AdminAbsensiPage() {
       item.employeeName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.branch.toLowerCase().includes(searchQuery.toLowerCase());
 
+    // Role filter
+    if (roleFilter !== "all" && item.role !== roleFilter) return false;
+
     // Status filter logic
     if (statusFilter === "all") return matchSearch;
     if (statusFilter === "absent_system" && !item.isPresent) return matchSearch;
@@ -224,23 +235,26 @@ export default function AdminAbsensiPage() {
     else if (leaveType === "absent") statusMapped = "Alpha";
 
     try {
+      // Construct proper timestamp for checkInTime if status is Hadir
+      let checkInTimestamp = null;
+      if (statusMapped === "Hadir" && startDate) {
+        // Create a new Date object from startDate and set time to 08:00
+        const dateObj = new Date(startDate);
+        dateObj.setHours(8, 0, 0, 0);
+        checkInTimestamp = dateObj.toISOString();
+      }
+
       const res = await fetch("/api/attendance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           employeeId: emp.id,
           branchId: emp.branch_id || currentBranch?.id || "",
-          date: format(startDate, "yyyy-MM-dd"), // Use local date, not UTC to avoid off-by-one errors
-          // Wait, Phase 4 plan didn't specify back-dating manual input fully, simplified MVP uses Today for POST.
-          // FIX: API POST uses Today. If we need manual input for past dates, API needs update.
-          // For now, let's assume manual input is for "Today" or we just update API later.
-          // Actually, let's check API. API creates "today".
-          // User might want to input for yesterday.
-          // Let's assume for MVP manual input is real-time or today-based.
+          date: format(startDate, "yyyy-MM-dd"),
           status: statusMapped,
           shift: "Pagi", // Default
           notes: reason,
-          checkInTime: statusMapped === "Hadir" ? "08:00" : null,
+          checkInTime: checkInTimestamp,
         }),
       });
 
@@ -261,11 +275,14 @@ export default function AdminAbsensiPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Apakah Anda yakin ingin menghapus data absensi ini?")) return;
+  // Delete State
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const confirmDelete = async () => {
+    if (!deleteId) return;
 
     try {
-      const res = await fetch(`/api/attendance?id=${id}`, {
+      const res = await fetch(`/api/attendance?id=${deleteId}`, {
         method: "DELETE",
       });
 
@@ -278,7 +295,13 @@ export default function AdminAbsensiPage() {
       }
     } catch (e) {
       toast.error("Terjadi kesalahan sistem");
+    } finally {
+      setDeleteId(null);
     }
+  };
+
+  const handleDelete = (id: string) => {
+    setDeleteId(id);
   };
 
   // Export handler
@@ -499,6 +522,18 @@ export default function AdminAbsensiPage() {
                   <SelectItem value="absent">Alpa</SelectItem>
                 </SelectContent>
               </Select>
+
+              <Select value={roleFilter} onValueChange={setRoleFilter}>
+                <SelectTrigger className="w-full sm:w-[150px]">
+                  <SelectValue placeholder="Role" />
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  <SelectItem value="all">Semua Role</SelectItem>
+                  <SelectItem value="Kasir">Kasir</SelectItem>
+                  <SelectItem value="Admin Cabang">Admin Cabang</SelectItem>
+                  <SelectItem value="Super Admin">Super Admin</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </CardContent>
@@ -642,6 +677,30 @@ export default function AdminAbsensiPage() {
           </div>
         )}
       </Card>
+
+      <AlertDialog
+        open={!!deleteId}
+        onOpenChange={(open) => !open && setDeleteId(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus Data Absensi?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tindakan ini tidak dapat dibatalkan. Data absensi ini akan dihapus
+              permanen dari database.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={confirmDelete}
+            >
+              Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

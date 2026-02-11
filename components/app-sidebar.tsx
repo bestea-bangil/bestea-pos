@@ -217,25 +217,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     activeEmployee,
   } = useBranch();
 
-  // Get avatar from localStorage
-  const [avatarUrl, setAvatarUrl] = React.useState("");
-  React.useEffect(() => {
-    if (activeEmployee?.id) {
-      const savedAvatar = localStorage.getItem(
-        `bestea-avatar-${activeEmployee.id}`,
-      );
-      if (savedAvatar) {
-        setAvatarUrl(savedAvatar);
-      }
-    }
-  }, [activeEmployee?.id]);
-
   // Compute user data from activeEmployee
   const userData = {
     name: activeEmployee?.name || "User",
     // @ts-ignore - Assuming email might be added or just placeholder
     email: activeEmployee?.email || activeEmployee?.branch || "",
-    avatar: avatarUrl,
+    avatar: activeEmployee?.avatar_url || "",
   };
 
   // Konversi branches ke format TeamSwitcher

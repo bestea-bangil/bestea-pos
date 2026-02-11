@@ -9,7 +9,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { User, Check, Loader2 } from "lucide-react";
+import { User, Check, Loader2, Lock } from "lucide-react";
 import { useBranch } from "@/contexts/branch-context";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
@@ -26,6 +26,7 @@ interface PinEntryModalProps {
   branchName: string;
   title?: string;
   description?: string;
+  successMessage?: string | null;
 }
 
 export function PinEntryModal({
@@ -33,21 +34,20 @@ export function PinEntryModal({
   onOpenChange,
   onSuccess,
   branchName,
-  title = "Masukkan PIN Karyawan",
-  description = "Masukkan PIN 4 digit untuk melanjutkan",
+  title = "Verifikasi Karyawan",
+  description = "Masukkan password Anda untuk melanjutkan",
+  ...props
 }: PinEntryModalProps) {
-  const [pin, setPin] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
-  const { verifyPin } = useBranch();
+  const { verifyPassword } = useBranch();
   const inputRef = useRef<HTMLInputElement>(null);
-
-  const PIN_LENGTH = 4;
 
   // Reset state when modal opens and focus input
   useEffect(() => {
     if (isOpen) {
-      setPin("");
+      setPassword("");
       setError(null);
       setTimeout(() => {
         inputRef.current?.focus();
@@ -55,25 +55,28 @@ export function PinEntryModal({
     }
   }, [isOpen]);
 
-  const handlePinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value.replace(/\D/g, "").slice(0, PIN_LENGTH);
-    setPin(value);
+  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPassword(e.target.value);
     setError(null);
   };
 
   const handleSubmit = async () => {
-    if (pin.length !== PIN_LENGTH) {
-      setError(`PIN harus ${PIN_LENGTH} digit`);
+    if (!password) {
+      setError("Password harus diisi");
       return;
     }
 
     setIsVerifying(true);
 
     try {
-      const employee = await verifyPin(pin);
+      const employee = await verifyPassword(password);
 
       if (employee) {
-        toast.success(`Selamat datang, ${employee.name}!`);
+        if (props.successMessage !== null) {
+          toast.success(
+            props.successMessage || `Selamat datang, ${employee.name}!`,
+          );
+        }
         onSuccess({
           id: employee.id,
           name: employee.name,
@@ -81,8 +84,8 @@ export function PinEntryModal({
           branch: employee.branch,
         });
       } else {
-        setError("PIN tidak valid atau karyawan tidak aktif");
-        setPin("");
+        setError("Password tidak valid atau karyawan tidak aktif");
+        setPassword("");
         inputRef.current?.focus();
       }
     } catch (e) {
@@ -93,7 +96,7 @@ export function PinEntryModal({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && pin.length === PIN_LENGTH) {
+    if (e.key === "Enter" && password) {
       handleSubmit();
     }
   };
@@ -103,7 +106,7 @@ export function PinEntryModal({
       <DialogContent className="sm:max-w-[360px] p-0 overflow-hidden">
         <DialogHeader className="p-6 pb-4 bg-gradient-to-br from-green-500 to-green-600 text-white">
           <div className="mx-auto mb-3 h-14 w-14 rounded-full bg-white/20 flex items-center justify-center">
-            <User className="h-7 w-7" />
+            <Lock className="h-7 w-7" />
           </div>
           <DialogTitle className="text-center text-xl">{title}</DialogTitle>
           <DialogDescription className="text-center text-green-100">
@@ -112,32 +115,18 @@ export function PinEntryModal({
         </DialogHeader>
 
         <div className="p-6">
-          {/* PIN Input */}
+          {/* Password Input */}
           <div className="mb-4">
             <Input
               ref={inputRef}
               type="password"
-              inputMode="numeric"
-              maxLength={PIN_LENGTH}
-              value={pin}
-              onChange={handlePinChange}
+              value={password}
+              onChange={handlePasswordChange}
               onKeyDown={handleKeyDown}
-              placeholder="Masukkan PIN"
-              className="h-14 text-center text-2xl font-bold tracking-[0.5em] placeholder:tracking-normal placeholder:text-sm"
+              placeholder="Masukkan Password"
+              className="h-12 text-center"
               autoFocus
             />
-          </div>
-
-          {/* PIN Dots Display */}
-          <div className="flex justify-center gap-3 mb-4">
-            {[...Array(PIN_LENGTH)].map((_, i) => (
-              <div
-                key={i}
-                className={`w-4 h-4 rounded-full transition-all ${
-                  i < pin.length ? "bg-green-500 scale-110" : "bg-slate-200"
-                }`}
-              />
-            ))}
           </div>
 
           {/* Error Message */}
@@ -151,7 +140,7 @@ export function PinEntryModal({
           <Button
             className="w-full h-12 text-lg bg-green-600 hover:bg-green-700"
             onClick={handleSubmit}
-            disabled={pin.length !== PIN_LENGTH || isVerifying}
+            disabled={!password || isVerifying}
           >
             {isVerifying ? (
               <>

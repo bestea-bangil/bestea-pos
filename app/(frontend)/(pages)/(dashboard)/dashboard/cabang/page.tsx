@@ -64,8 +64,8 @@ export default function CabangPage() {
     phone: "",
   });
 
-  // Filter only cabang type (exclude admin)
-  const cabangList = branches.filter((b) => b.type === "cabang");
+  // Show all branch types
+  const displayBranches = branches;
 
   // Get employee count per branch
   const getEmployeeCount = (branchName: string) => {
@@ -163,7 +163,7 @@ export default function CabangPage() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Total Cabang</p>
-                <p className="text-2xl font-bold">{cabangList.length}</p>
+                <p className="text-2xl font-bold">{displayBranches.length}</p>
               </div>
             </div>
           </CardContent>
@@ -175,8 +175,12 @@ export default function CabangPage() {
                 <Users className="h-6 w-6 text-green-600" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Total Karyawan</p>
-                <p className="text-2xl font-bold">{employees.length}</p>
+                <p className="text-sm text-muted-foreground">
+                  Total Karyawan (Kasir)
+                </p>
+                <p className="text-2xl font-bold">
+                  {employees.filter((e) => e.role === "Kasir").length}
+                </p>
               </div>
             </div>
           </CardContent>
@@ -192,8 +196,11 @@ export default function CabangPage() {
                   Rata-rata Karyawan
                 </p>
                 <p className="text-2xl font-bold">
-                  {cabangList.length > 0
-                    ? Math.round(employees.length / cabangList.length)
+                  {displayBranches.length > 0
+                    ? Math.round(
+                        employees.filter((e) => e.role === "Kasir").length /
+                          displayBranches.length,
+                      )
                     : 0}
                 </p>
               </div>
@@ -213,16 +220,16 @@ export default function CabangPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[300px]">Cabang</TableHead>
+                <TableHead className="w-[250px]">Cabang</TableHead>
+                <TableHead>Tipe</TableHead>
                 <TableHead>Alamat</TableHead>
-
                 <TableHead>Telepon</TableHead>
                 <TableHead>Karyawan</TableHead>
                 <TableHead className="text-right">Aksi</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {cabangList.map((branch) => (
+              {displayBranches.map((branch) => (
                 <TableRow key={branch.id}>
                   <TableCell>
                     <div className="flex items-center gap-3">
@@ -238,6 +245,18 @@ export default function CabangPage() {
                     </div>
                   </TableCell>
                   <TableCell>
+                    <Badge
+                      variant="secondary"
+                      className={
+                        branch.type === "admin"
+                          ? "bg-purple-100 text-purple-700"
+                          : "bg-slate-100 text-slate-700"
+                      }
+                    >
+                      {branch.type === "admin" ? "Pusat (HQ)" : "Cabang"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
                     {branch.address ? (
                       <div className="flex items-center text-sm text-muted-foreground">
                         <MapPin className="mr-1.5 h-3.5 w-3.5" />
@@ -247,7 +266,6 @@ export default function CabangPage() {
                       <span className="text-xs text-muted-foreground">-</span>
                     )}
                   </TableCell>
-
                   <TableCell>
                     {branch.phone ? (
                       <div className="flex items-center text-sm text-muted-foreground">
@@ -294,7 +312,7 @@ export default function CabangPage() {
                   </TableCell>
                 </TableRow>
               ))}
-              {cabangList.length === 0 && (
+              {displayBranches.length === 0 && (
                 <TableRow>
                   <TableCell
                     colSpan={5}

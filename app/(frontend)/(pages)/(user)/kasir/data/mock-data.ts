@@ -37,13 +37,14 @@ export interface Transaction {
   date: string;
   time: string;
   total: number;
-  paymentMethod: "cash" | "qris";
-  status: "completed" | "pending" | "cancelled";
+  paymentMethod: "cash" | "qris" | "debit";
+  status: "completed" | "pending" | "cancelled" | "void";
   items: TransactionItem[];
   employeeId?: string;
   employeeName?: string;
   branchName?: string;
   cashierName?: string;
+  transactionCode?: string;
 }
 
 export const activeCategories: Category[] = [

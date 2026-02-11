@@ -27,17 +27,17 @@ export async function GET() {
 
     if (error) throw error;
 
-    const formatted = data.map((p) => ({
+    const formatted = (data || []).map((p) => ({
       id: p.id,
       name: p.name,
       category: p.categories?.name || "",
       categoryId: p.category_id,
-      price: Number(p.price),
+      price: p.price !== null ? Number(p.price) : null,
       trackStock: p.track_stock,
       stock: p.stock,
       image: p.image_url || "/placeholder-tea.jpg",
       status: p.status,
-      variants: p.product_variants.map((v: any) => ({
+      variants: (p.product_variants || []).map((v: any) => ({
         name: v.name,
         price: Number(v.price)
       }))
@@ -45,7 +45,6 @@ export async function GET() {
 
     return NextResponse.json(formatted);
   } catch (error) {
-    console.error("[API Products] Error:", error);
     return NextResponse.json({ error: "Failed to fetch products" }, { status: 500 });
   }
 }
@@ -53,18 +52,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { name, category, price, trackStock, stock, image, status, variants } = body;
-
-    // 1. Get Category ID
-    let categoryId = null;
-    if (category) {
-        const { data: catData } = await supabase
-            .from("categories")
-            .select("id")
-            .eq("name", category)
-            .single();
-        categoryId = catData?.id;
-    }
+    const { name, categoryId, price, trackStock, stock, image, status, variants } = body;
 
     // 2. Insert Product
     const { data: product, error } = await supabase
@@ -96,7 +84,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json(product);
   } catch (error) {
-    console.error("[API Products] Create Error:", error);
     return NextResponse.json({ error: "Failed to create product" }, { status: 500 });
   }
 }
@@ -104,18 +91,7 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
     try {
         const body = await request.json();
-        const { id, name, category, price, trackStock, stock, image, status, variants } = body;
-
-        // 1. Get Category ID
-        let categoryId = null;
-        if (category) {
-            const { data: catData } = await supabase
-                .from("categories")
-                .select("id")
-                .eq("name", category)
-                .single();
-            categoryId = catData?.id;
-        }
+        const { id, name, categoryId, price, trackStock, stock, image, status, variants } = body;
 
         // 2. Update Product
         const { error } = await supabase
@@ -147,7 +123,6 @@ export async function PUT(request: Request) {
 
         return NextResponse.json({ success: true });
     } catch (error) {
-        console.error("[API Products] Update Error:", error);
         return NextResponse.json({ error: "Failed to update product" }, { status: 500 });
     }
 }
@@ -164,7 +139,6 @@ export async function DELETE(request: Request) {
 
         return NextResponse.json({ success: true });
     } catch (error) {
-        console.error("[API Products] Delete Error:", error);
         return NextResponse.json({ error: "Failed to delete product" }, { status: 500 });
     }
 }

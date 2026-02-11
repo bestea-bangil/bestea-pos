@@ -91,12 +91,6 @@ const checkEmployeeSchedule = async (
     const weekStart = getWeekStart();
     const dayIndex = getDayIndex();
 
-    console.log("[ShiftModal] Checking schedule...", {
-      weekStart,
-      dayIndex,
-      employeeId,
-    });
-
     // Add cache: 'no-store' to prevent caching
     const response = await fetch(
       `/api/shift-schedules?week_start=${weekStart}&employee_id=${employeeId}`,
@@ -104,21 +98,17 @@ const checkEmployeeSchedule = async (
     );
 
     if (!response.ok) {
-      console.error("[ShiftModal] Failed to fetch schedule");
       throw new Error("Failed to fetch schedule");
     }
 
     const schedules = await response.json();
-    console.log("[ShiftModal] Schedules fetched:", schedules);
 
     // Find today's schedule
     const todaySchedule = schedules.find(
       (s: any) => s.day_of_week === dayIndex,
     );
-    console.log("[ShiftModal] Today's schedule match:", todaySchedule);
 
     if (!todaySchedule || todaySchedule.shift_type === "Libur") {
-      console.log("[ShiftModal] No schedule matches or Libur");
       return {
         hasSchedule: false,
         shiftType: todaySchedule?.shift_type || null,
@@ -134,7 +124,6 @@ const checkEmployeeSchedule = async (
       endTime: todaySchedule.end_time,
     };
   } catch (error) {
-    console.error("Error checking schedule:", error);
     return {
       hasSchedule: false,
       shiftType: null,
@@ -163,7 +152,6 @@ const checkAlreadyCheckedIn = async (employeeId: string): Promise<boolean> => {
     // If there's any record for today, they've already checked in
     return records.length > 0;
   } catch (error) {
-    console.error("Error checking attendance:", error);
     return false;
   }
 };
@@ -177,7 +165,8 @@ interface ShiftModalProps {
 export function ShiftModal({ isOpen, mode, onOpenChange }: ShiftModalProps) {
   const router = useRouter();
   const { openShift, closeShift, shiftData } = useShift();
-  const { clockIn, clockOut, currentBranch, setActiveEmployee } = useBranch();
+  const { clockIn, clockOut, currentBranch, setActiveEmployee, logout } =
+    useBranch();
   const [amount, setAmount] = useState("");
   const [error, setError] = useState("");
   const [summary, setSummary] = useState<any>(null);
@@ -237,7 +226,6 @@ export function ShiftModal({ isOpen, mode, onOpenChange }: ShiftModalProps) {
   };
 
   const handleSubmit = async () => {
-    console.log("Submitting shift form...");
     const value = parseNumber(amount);
 
     if (value < 0) {
@@ -315,7 +303,6 @@ export function ShiftModal({ isOpen, mode, onOpenChange }: ShiftModalProps) {
       }
 
       const branchIdToUse = currentBranch?.id || pendingEmployee.branchId;
-      console.log("[ShiftModal] Opening shift with branchId:", branchIdToUse);
 
       if (!branchIdToUse) {
         toast.error("Gagal membuka shift: Data cabang tidak ditemukan");
@@ -343,7 +330,6 @@ export function ShiftModal({ isOpen, mode, onOpenChange }: ShiftModalProps) {
             }
           })
           .catch((err) => {
-            console.error("Auto clock-in failed", err);
             toast.error("Gagal mencatat absensi masuk");
           });
       }
@@ -369,7 +355,6 @@ export function ShiftModal({ isOpen, mode, onOpenChange }: ShiftModalProps) {
     role: string;
     branch: string;
   }) => {
-    console.log("[CloseShift] PIN verified for:", employee.name);
     setPendingEmployee(employee);
     setShowPinModal(false);
 
@@ -401,7 +386,6 @@ export function ShiftModal({ isOpen, mode, onOpenChange }: ShiftModalProps) {
     }
 
     setShowConfirm(true);
-    console.log("[CloseShift] showConfirm set to true");
   };
 
   const handleConfirmClosure = async () => {
@@ -413,19 +397,38 @@ export function ShiftModal({ isOpen, mode, onOpenChange }: ShiftModalProps) {
       await closeShift(value, pendingEmployee, notes);
 
       // Auto Clock Out - Pass status if early
-      const clockOutStatus = isEarlyClosing ? "Hadir (Pulang Awal)" : undefined;
+      // Fix: Send undefined to keep DB status check happy (e.g. "Hadir" or "Terlambat" from clock-in)
+      // "Pulang Awal" is just a note.
+      const clockOutStatus = undefined;
+
+      // Append to notes if early
+      let finalNotes = notes;
+      if (isEarlyClosing) {
+        finalNotes = notes ? `${notes} (Pulang Awal)` : "Pulang Awal";
+      }
+
+      // We need to pass notes to closeShift but clockOut logic is separate?
+      // Actually closeShift (context) handles the SHIFT record. clockOut (context) handles ATTENDANCE.
+      // We should update attendance notes if needed.
+      // However, the current clockOut function in branch-context only takes status.
+      // Let's just update the shift note for now, and let attendance status remain as checked-in status.
+      // (Or we update the API to allow updating notes on clockout, but let's stick to the plan: fix ID error first).
+
+      await closeShift(value, pendingEmployee, finalNotes);
+      await closeShift(value, pendingEmployee, finalNotes);
       await clockOut(pendingEmployee.id, clockOutStatus);
 
       toast.dismiss("close-shift");
       toast.success("Shift Berhasil Ditutup", {
-        description: "Laporan shift telah disimpan.",
+        description: "Laporan shift disimpan. Logout...",
       });
 
       setShowConfirm(false);
       onOpenChange(false);
 
-      // Force refresh data
-      router.refresh();
+      // Logout and redirect
+      logout();
+      router.push("/login"); // or wherever the login page is
     } catch (err: any) {
       toast.dismiss("close-shift");
       toast.error("Gagal menutup shift", {
@@ -436,7 +439,22 @@ export function ShiftModal({ isOpen, mode, onOpenChange }: ShiftModalProps) {
 
   return (
     <>
-      <Dialog open={isOpen} onOpenChange={onOpenChange}>
+      <PinEntryModal
+        isOpen={showPinModal}
+        onOpenChange={setShowPinModal}
+        onSuccess={
+          mode === "open" ? handlePinSuccess : handleCloseShiftPinSuccess
+        }
+        branchName={currentBranch?.name || "Cabang"}
+        title={mode === "open" ? "Buka Shift Kasir" : "Verifikasi Tutup Shift"}
+        description={
+          mode === "open"
+            ? "Masukkan PIN kasir untuk membuka shift baru"
+            : "Masukkan PIN untuk konfirmasi tutup shift"
+        }
+        successMessage={mode === "close" ? null : undefined} // Suppress welcome toast on close
+      />
+      <Dialog open={isOpen && !showPinModal} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -483,7 +501,7 @@ export function ShiftModal({ isOpen, mode, onOpenChange }: ShiftModalProps) {
             )}
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="gap-2 sm:gap-2">
             <Button
               variant="outline"
               onClick={() => onOpenChange(false)}
@@ -495,7 +513,7 @@ export function ShiftModal({ isOpen, mode, onOpenChange }: ShiftModalProps) {
               className={`flex-1 ${mode === "open" ? "bg-green-600 hover:bg-green-700 shadow-green-100" : "bg-orange-600 hover:bg-orange-700 shadow-orange-100"} shadow-lg text-white font-semibold`}
               onClick={handleSubmit}
             >
-              {mode === "open" ? "Buka Kasir" : "Lanjut Tutup"}
+              {mode === "open" ? "Buka Kasir" : "Selesai & Logout"}
             </Button>
           </DialogFooter>
         </DialogContent>

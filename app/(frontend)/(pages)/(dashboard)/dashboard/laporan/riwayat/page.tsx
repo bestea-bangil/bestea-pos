@@ -1,7 +1,7 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CreditCard } from "lucide-react";
+import { CreditCard, ShoppingCart } from "lucide-react";
 
 import { useState } from "react";
 import {
@@ -34,17 +34,11 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { useTransactions } from "@/app/context/transaction-context";
-
-// Mock Branches for Filter
-const branches = [
-  "Semua Cabang",
-  "Cabang Bangil",
-  "Cabang Pasuruan",
-  "Cabang Malang",
-];
+import { useBranch } from "@/contexts/branch-context";
 
 export default function RiwayatPage() {
-  const [selectedBranch, setSelectedBranch] = useState("Semua Cabang");
+  const { branches } = useBranch();
+  const [selectedBranch, setSelectedBranch] = useState("all");
   const [dateRange, setDateRange] = useState("Hari Ini");
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -53,14 +47,74 @@ export default function RiwayatPage() {
   const { getTransactionsByBranch } = useTransactions();
   const transactions = getTransactionsByBranch(selectedBranch);
 
+  // Date Filtering Helper
+  const isDateInRange = (dateString: string, range: string) => {
+    const d = new Date(dateString);
+    const now = new Date();
+
+    // Normalize to start of day for accurate comparison
+    const targetDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    if (range === "Hari Ini") {
+      return targetDate.getTime() === today.getTime();
+    }
+
+    if (range === "Kemarin") {
+      const yesterday = new Date(today);
+      yesterday.setDate(today.getDate() - 1);
+      return targetDate.getTime() === yesterday.getTime();
+    }
+
+    if (range === "Minggu Ini") {
+      // Get Monday of current week
+      const day = today.getDay();
+      const diff = today.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
+      const monday = new Date(today.setDate(diff));
+      monday.setHours(0, 0, 0, 0);
+      return targetDate >= monday;
+    }
+
+    if (range === "Bulan Ini") {
+      return (
+        targetDate.getMonth() === today.getMonth() &&
+        targetDate.getFullYear() === today.getFullYear()
+      );
+    }
+
+    return true; // Default show all if unknown range (or "Semua")
+  };
+
   const filteredTransactions = transactions.filter((trx) => {
     const matchesBranch =
-      selectedBranch === "Semua Cabang" || trx.branchName === selectedBranch;
+      selectedBranch === "all" ||
+      trx.branchName === branches.find((b) => b.id === selectedBranch)?.name ||
+      trx.branchId === selectedBranch;
+
     const matchesSearch =
+      (trx.transactionCode &&
+        trx.transactionCode
+          .toLowerCase()
+          .includes(searchQuery.toLowerCase())) ||
       trx.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
       trx.cashierName.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesBranch && matchesSearch;
+
+    const matchesDate = isDateInRange(trx.date, dateRange);
+
+    return matchesBranch && matchesSearch && matchesDate;
   });
+
+  // Calculate Total Amount
+  const totalAmount = filteredTransactions
+    .filter((t) => t.status === "completed")
+    .reduce((acc, curr) => acc + curr.totalAmount, 0);
+
+  // Helper to get selected branch name for display
+  const getBranchDisplayName = () => {
+    if (selectedBranch === "all") return "Semua Cabang";
+    const branch = branches.find((b) => b.id === selectedBranch);
+    return branch ? branch.name : selectedBranch; // Fallback to ID if not found, but name preferred
+  };
 
   // Pagination Logic
   const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage);
@@ -70,11 +124,6 @@ export default function RiwayatPage() {
     startIndex,
     endIndex,
   );
-
-  // Calculate Total Amount
-  const totalAmount = filteredTransactions
-    .filter((t) => t.status === "completed")
-    .reduce((acc, curr) => acc + curr.totalAmount, 0);
 
   // Export handler
   const handleExport = () => {
@@ -88,7 +137,7 @@ export default function RiwayatPage() {
       "Total",
     ];
     const rows = filteredTransactions.map((trx) => [
-      trx.id,
+      trx.transactionCode || trx.id,
       new Date(trx.date).toLocaleString("id-ID"),
       trx.branchName,
       trx.cashierName,
@@ -130,20 +179,40 @@ export default function RiwayatPage() {
         </Button>
       </div>
 
-      {/* Summary Card */}
+      {/* Summary Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
+        <Card className="bg-white border-slate-200">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Total Penjualan
+            <CardTitle className="text-sm font-medium text-slate-600">
+              Total Pendapatan
             </CardTitle>
-            <CreditCard className="h-4 w-4 text-muted-foreground" />
+            <CreditCard className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-2xl font-bold text-slate-900">
               {formatRupiah(totalAmount)}
             </div>
-            <p className="text-xs text-muted-foreground">{dateRange}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {dateRange} • {getBranchDisplayName()}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-white border-slate-200">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-slate-600">
+              Total Transaksi
+            </CardTitle>
+            <ShoppingCart className="h-4 w-4 text-blue-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-slate-900">
+              {
+                filteredTransactions.filter((t) => t.status === "completed")
+                  .length
+              }
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Order selesai</p>
           </CardContent>
         </Card>
       </div>
@@ -166,9 +235,10 @@ export default function RiwayatPage() {
               <SelectValue placeholder="Pilih Cabang" />
             </SelectTrigger>
             <SelectContent position="popper">
+              <SelectItem value="all">Semua Cabang</SelectItem>
               {branches.map((b) => (
-                <SelectItem key={b} value={b}>
-                  {b}
+                <SelectItem key={b.id} value={b.id}>
+                  {b.name}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -209,7 +279,9 @@ export default function RiwayatPage() {
             {paginatedTransactions.length > 0 ? (
               paginatedTransactions.map((trx) => (
                 <TableRow key={trx.id}>
-                  <TableCell className="font-medium">{trx.id}</TableCell>
+                  <TableCell className="font-medium">
+                    {trx.transactionCode || trx.id}
+                  </TableCell>
                   <TableCell>
                     {new Date(trx.date).toLocaleString("id-ID")}
                   </TableCell>

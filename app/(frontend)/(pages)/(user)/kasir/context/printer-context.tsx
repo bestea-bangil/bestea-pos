@@ -7,7 +7,11 @@ import {
   ReactNode,
   useCallback,
 } from "react";
-import { PrinterEncoder, PrinterConfig } from "@/app/lib/printer-utils";
+import {
+  PrinterEncoder,
+  PrinterConfig,
+  processLogo,
+} from "@/app/lib/printer-utils";
 import { toast } from "sonner";
 import { Transaction } from "../data/mock-data";
 
@@ -86,9 +90,7 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
         try {
           const parsed = JSON.parse(saved);
           setSettings(parsed);
-        } catch (e) {
-          console.error("Failed to parse printer settings", e);
-        }
+        } catch (e) {}
       }
     }
   });
@@ -151,7 +153,6 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
         description: selectedDevice.name || "Bluetooth Printer",
       });
     } catch (err: any) {
-      console.error("Bluetooth connection error:", err);
       const errorMessage = err.message || "Failed to connect to printer";
       setError(errorMessage);
       toast.error("Gagal menghubungkan printer", {
@@ -201,7 +202,6 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
           activeCharacteristic = outputCharacteristic;
         }
       } catch (reconnectErr: any) {
-        console.error("Reconnect failed:", reconnectErr);
         setError("Connection lost. Please reconnect printer.");
         toast.error("Koneksi printer terputus", {
           description: "Silakan hubungkan ulang printer dari tombol Connect.",
@@ -217,63 +217,128 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
     try {
       const encoder = new PrinterEncoder(settings);
 
-      // Header with Logo text (for thermal printers without image support)
+      // Header with Logo text
       encoder.align("center");
       encoder.newline();
-      encoder.bold(true);
-      encoder.size("large");
-      encoder.line("*** BESTEA ***");
-      encoder.size("normal");
-      encoder.bold(false);
-      encoder.line("Fresh Tea & Good Vibes");
-      // Use dynamic branch name from transaction
-      encoder.line(transaction.branchName || "Cabang Bestea");
-      encoder.line("Jl. A. Yani No. 45");
-      encoder.separator();
 
-      // Transaction Info / Metadata
-      encoder.align("left");
-      encoder.line(`No    : ${transaction.id}`);
-      encoder.line(`Tgl   : ${transaction.date} ${transaction.time || ""}`);
-      // Add cashier name
-      if (transaction.cashierName) {
-        encoder.line(`Kasir : ${transaction.cashierName}`);
+      // Logo
+      try {
+        const logoData = await processLogo("/logo/bestea-logo.png");
+        if (logoData) {
+          encoder.raw(logoData);
+          encoder.newline(2); // Spacing after logo as requested
+        } else {
+          // Fallback if image fails
+          encoder.bold(true);
+          encoder.size("large");
+          encoder.line("Bestea");
+          encoder.size("normal");
+          encoder.bold(false);
+        }
+      } catch (e) {
+        encoder.bold(true);
+        encoder.size("large");
+        encoder.line("Bestea");
+        encoder.size("normal");
+        encoder.bold(false);
       }
-      encoder.line(
-        `Bayar : ${transaction.paymentMethod === "qris" ? "QRIS" : "Tunai"}`,
-      );
-      encoder.separator();
 
-      // Items Header
-      encoder.row("Item", "Harga");
+      // Branch Name
+      encoder.bold(true);
+      encoder.line(transaction.branchName || "Bestea Bangil");
+      encoder.bold(false);
+
+      // Address & Phone (From image/template)
+      encoder.line("Jl. Salem Kersikan Bangil");
+      encoder.line("081779677759");
+      encoder.newline();
+
+      // Meta: Date Time and Transaction Code
+      // Format: 25/9/2025 18:40          #1115
+      encoder.align("left");
+      const dateStr = `${transaction.date} ${transaction.time || ""}`;
+      const codeStr = `${(transaction.transactionCode || transaction.id).slice(-4)}`; // Use last 4 digits for short code style
+      encoder.row(dateStr, codeStr);
+
+      // Cashier Name (Requested Addition)
+      if (transaction.cashierName) {
+        encoder.line(`Kasir: ${transaction.cashierName}`);
+      }
+
+      encoder.separator("-");
 
       // Items List
+      // Format:
+      // Milk Tiramishu
+      //   1x 8.000      8.000
       transaction.items.forEach((item) => {
-        encoder.line(`${item.name} (${item.variant})`);
-
-        encoder.row(
-          `  ${item.quantity} x ${new Intl.NumberFormat("id-ID").format(item.price)}`,
-          `${new Intl.NumberFormat("id-ID").format(item.quantity * item.price)}`,
+        encoder.align("left");
+        encoder.line(
+          `${item.name} ${item.variant ? "(" + item.variant + ")" : ""}`,
         );
+
+        const qtyPrice = `${item.quantity}x ${new Intl.NumberFormat("id-ID").format(item.price)}`;
+        const subtotal = new Intl.NumberFormat("id-ID").format(
+          item.quantity * item.price,
+        );
+
+        encoder.row(qtyPrice, subtotal);
       });
 
-      // Totals
-      encoder.separator();
-      encoder.bold(true);
-      encoder.size("large");
-      encoder.row(
-        "TOTAL:",
-        `Rp ${new Intl.NumberFormat("id-ID").format(transaction.total)}`,
-      );
-      encoder.size("normal");
-      encoder.bold(false);
+      encoder.separator("-");
 
-      // Footer - Clean single thank you
-      encoder.separator();
+      // Summary
+      // Produk: [Count]
+      // Item: [Total Qty]
+      const uniqueItems = transaction.items.length;
+      const totalItems = transaction.items.reduce(
+        (acc, item) => acc + item.quantity,
+        0,
+      );
+
+      encoder.align("left");
+      encoder.line(`Produk: ${uniqueItems}`);
+      encoder.line(`Item: ${totalItems}`);
+
+      encoder.separator("-");
+
+      // Payment
+      // Total            Rp48.000
+      // Tunai            Rp48.000
+      //                     Lunas
+
+      const totalFormatted = `Rp${new Intl.NumberFormat("id-ID").format(transaction.total)}`;
+      encoder.row("Total", totalFormatted);
+
+      const paymentMethod =
+        transaction.paymentMethod === "qris"
+          ? "QRIS"
+          : transaction.paymentMethod === "debit"
+            ? "Debit"
+            : "Tunai";
+      // Assuming paid amount matches total for "Lunas" display simplification
+      encoder.row(paymentMethod, totalFormatted);
+
+      encoder.align("right");
+      encoder.line("Lunas");
+
+      encoder.separator("-");
+
+      // Footer
       encoder.align("center");
+      encoder.line("Ikut rekening pak aan(pak said)");
+      encoder.separator("-");
       encoder.newline();
-      encoder.line("Terima Kasih!");
-      encoder.line("Selamat Menikmati");
+
+      encoder.line("Terima kasih");
+      const printTime = new Date().toLocaleString("id-ID", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      encoder.line(`Dicetak: ${printTime}`);
       encoder.newline();
       encoder.cut();
 
@@ -281,18 +346,12 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
       const data = encoder.encode();
       const chunkSize = settings.chunkSize || 100;
 
-      console.log("=== PRINT DEBUG ===");
-      console.log("Data length:", data.length, "bytes");
-      console.log("Chunk size:", chunkSize);
-
       for (let i = 0; i < data.length; i += chunkSize) {
         const chunk = data.slice(i, i + chunkSize);
         await activeCharacteristic.writeValue(chunk);
       }
-      console.log("=== PRINT COMPLETE ===");
       toast.success("Struk berhasil dicetak");
     } catch (err: any) {
-      console.error("Print error:", err);
       const errorMessage = "Printing failed: " + err.message;
       setError(errorMessage);
       toast.error("Gagal mencetak struk", {

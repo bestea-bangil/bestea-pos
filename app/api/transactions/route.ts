@@ -17,98 +17,103 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { transaction, items } = body;
 
-    console.log("[API] Received transaction:", transaction);
+    // Generate a friendly ID for display/receipt (#001)
+    // Generate a friendly ID for display/receipt (#001)
+    // Get latest transaction for today to generate sequence
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
 
-    // 1. Insert Transaction Record
-    const { data: trxData, error: trxError } = await supabase
+    const { data: lastTrx } = await supabase
       .from("transactions")
-      .insert({
-        branch_id: transaction.branchId,
-        cashier_id: transaction.cashierId,
-        cashier_name: transaction.cashierName,
-        customer_name: transaction.customerName,
-        total_amount: transaction.totalAmount,
-        payment_method: transaction.paymentMethod,
-        amount_paid: transaction.amountPaid,
-        change_amount: transaction.changeAmount,
-        status: transaction.status || "completed",
-        shift_session_id: transaction.shiftSessionId,
-      })
-      .select()
-      .single();
+      .select("transaction_code")
+      .gte("created_at", todayStart.toISOString())
+      .lte("created_at", todayEnd.toISOString())
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    if (trxError) {
-      console.error("[API] Transaction Insert Error:", trxError);
+    let dailySequence = 1;
+    if (lastTrx?.transaction_code) {
+      // Extract number from "#001" -> 1
+      const lastNum = parseInt(lastTrx.transaction_code.replace(/\D/g, ""));
+      if (!isNaN(lastNum)) {
+        dailySequence = lastNum + 1;
+      }
+    }
+
+    const transactionCode = `#${dailySequence.toString().padStart(3, "0")}`;
+
+
+    // 1. Prepare Data for RPC
+    const transactionData = {
+      branchId: transaction.branchId,
+      cashierId: transaction.cashierId,
+      cashierName: transaction.cashierName,
+      customerName: transaction.customerName,
+      totalAmount: transaction.totalAmount,
+      paymentMethod: transaction.paymentMethod,
+      amountPaid: transaction.amountPaid,
+      changeAmount: transaction.changeAmount,
+      status: transaction.status || "completed",
+      shiftSessionId: transaction.shiftSessionId,
+      transactionCode: transactionCode,
+    };
+
+    const itemsData = items.map((item: any) => ({
+      productId: item.productId,
+      productName: item.productName,
+      variant: item.variant,
+      quantity: item.quantity,
+      price: item.price,
+      subtotal: item.subtotal,
+    }));
+
+    // 2. Call RPC
+    const { data: trxData, error: rpcError } = await supabase.rpc(
+      "process_transaction",
+      {
+        p_transaction: transactionData,
+        p_items: itemsData,
+      },
+    );
+
+    if (rpcError) {
+      console.error("RPC Error:", rpcError);
       return NextResponse.json(
-        { error: "Failed to create transaction record", details: trxError },
+        { error: "Failed to process transaction", details: rpcError },
         { status: 500 },
       );
     }
 
-    // 2. Insert Transaction Items
-    if (items && items.length > 0) {
-      const itemsToInsert = items.map((item: any) => ({
-        transaction_id: trxData.id,
-        product_id: item.productId,
-        product_name: item.productName,
-        variant_name: item.variant,
-        quantity: item.quantity,
-        price: item.price,
-        subtotal: item.subtotal,
-      }));
-
-      const { error: itemsError } = await supabase
-        .from("transaction_items")
-        .insert(itemsToInsert);
-
-      if (itemsError) {
-        console.error("[API] Items Insert Error:", itemsError);
-        return NextResponse.json(
-          { error: "Failed to create transaction items", details: itemsError },
-          { status: 500 },
-        );
-      }
-
-      // 3. Update Stock (Decrease)
-      // We process updates in parallel for performance
-      await Promise.all(items.map(async (item: any) => {
-          // Only decrement if product exists and track_stock might be true. 
-          // We can try to decrement where track_stock is true.
-          // Since we don't know track_stock status here without fetching, 
-          // we can rely on a SQL query that conditionally updates.
-          // But Supabase simple client update:
-          // update products set stock = stock - qty where id = item.productId and track_stock = true
-          
-          // However, supabase-js .update() doesn't support "stock = stock - qty" syntax directly without RPC.
-          // We must fetch current stock OR use RPC.
-          // Fallback: Fetch product first.
-          
-          const { data: product } = await supabase
-            .from("products")
-            .select("stock, track_stock")
-            .eq("id", item.productId)
-            .single();
-            
-          if (product && product.track_stock) {
-             const newStock = (product.stock || 0) - item.quantity;
-             await supabase
-               .from("products")
-               .update({ stock: newStock })
-               .eq("id", item.productId);
-          }
-      }));
-    }
-
     // 3. Return Success
-    // We append items to the returned data structure to match what the Context expects
-    const responseData = {
-      ...trxData,
-      items: items || [], // Return items back
+    // Map snake_case to camelCase (RPC returns raw JSON, but we built it with mixed case in SQL? 
+    // Wait, the SQL returns jsonb_build_object with specific keys.
+    // Let's check the SQL return: keys are id, date, transactionCode, status.
+    // We need to construct the full response expected by the frontend.
+    
+    const formattedTransaction = {
+      id: trxData.id,
+      date: trxData.date,
+      branchId: transaction.branchId,
+      cashierId: transaction.cashierId,
+      cashierName: transaction.cashierName,
+      branchName: transaction.branchName, // Pass through
+      customerName: transaction.customerName,
+      totalAmount: transaction.totalAmount,
+      paymentMethod: transaction.paymentMethod,
+      amountPaid: transaction.amountPaid,
+      changeAmount: transaction.changeAmount,
+      status: trxData.status,
+      shiftSessionId: transaction.shiftSessionId,
+      transactionCode: trxData.transactionCode,
+      items: items || [],
     };
 
-    return NextResponse.json(responseData, { status: 200 });
+    return NextResponse.json(formattedTransaction, { status: 200 });
   } catch (error) {
-    console.error("[API] Unexpected Error:", error);
+    console.error("Transaction Error:", error);
     return NextResponse.json(
       { error: "Internal Server Error", details: error },
       { status: 500 },

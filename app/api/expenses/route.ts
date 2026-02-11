@@ -43,7 +43,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json(data);
   } catch (error) {
-    console.error("[API Expense] Create Error:", error);
     return NextResponse.json({ error: "Failed to create expense" }, { status: 500 });
   }
 }

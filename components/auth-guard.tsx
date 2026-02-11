@@ -40,7 +40,6 @@ export function AuthGuard({ children, allowedRoles }: AuthGuardProps) {
         const parsed = JSON.parse(storedAuth);
         role = parsed.role;
       } catch (e) {
-        console.error("Auth parse error", e);
         router.push("/login");
         return;
       }
@@ -71,7 +70,7 @@ export function AuthGuard({ children, allowedRoles }: AuthGuardProps) {
 
     // Run check
     checkAuth();
-  }, [router, pathname, allowedRoles]);
+  }, [router, pathname, allowedRoles, userRole]);
 
   // While checking, show nothing or loading
   if (!isAuthorized) {

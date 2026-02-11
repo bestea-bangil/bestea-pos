@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { LayoutDashboard } from "lucide-react";
 import {
   SidebarMenu,
   SidebarMenuButton,
@@ -16,8 +15,12 @@ export function TeamSwitcher() {
           size="lg"
           className="cursor-default hover:bg-transparent"
         >
-          <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-            <LayoutDashboard className="size-4" />
+          <div className="flex aspect-square size-8 items-center justify-center rounded-lg text-sidebar-primary-foreground">
+            <img
+              src="/logo/small-logo.png"
+              alt="Bestea Logo"
+              className="size-8 object-contain"
+            />
           </div>
           <div className="grid flex-1 text-left text-sm leading-tight">
             <span className="truncate font-semibold">Bestea POS</span>

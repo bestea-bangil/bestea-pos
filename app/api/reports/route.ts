@@ -36,40 +36,47 @@ export async function GET(request: Request) {
     const startDateParam = searchParams.get("startDate");
     const endDateParam = searchParams.get("endDate");
 
-    let start: Date, end: Date;
+    const WIB_OFFSET = 7 * 60 * 60 * 1000;
+    const now = new Date();
+    const nowWIB = new Date(now.getTime() + WIB_OFFSET);
+
+    let startLocal: Date, endLocal: Date;
 
     if (startDateParam && endDateParam) {
-        start = startOfDay(parseISO(startDateParam));
-        end = endOfDay(parseISO(endDateParam));
+        startLocal = startOfDay(parseISO(startDateParam));
+        endLocal = endOfDay(parseISO(endDateParam));
     } else {
-        const now = new Date();
         switch (period) {
           case "today":
-            start = startOfDay(now);
-            end = endOfDay(now);
+            startLocal = startOfDay(nowWIB);
+            endLocal = endOfDay(nowWIB);
             break;
           case "yesterday":
-            const yesterday = subDays(now, 1);
-            start = startOfDay(yesterday);
-            end = endOfDay(yesterday);
+            const yesterdayWIB = subDays(nowWIB, 1);
+            startLocal = startOfDay(yesterdayWIB);
+            endLocal = endOfDay(yesterdayWIB);
             break;
           case "this_week":
-            start = startOfWeek(now, { weekStartsOn: 1 });
-            end = endOfWeek(now, { weekStartsOn: 1 });
+            startLocal = startOfWeek(nowWIB, { weekStartsOn: 1 });
+            endLocal = endOfWeek(nowWIB, { weekStartsOn: 1 });
             break;
           case "this_month":
-            start = startOfMonth(now);
-            end = endOfMonth(now);
+            startLocal = startOfMonth(nowWIB);
+            endLocal = endOfMonth(nowWIB);
             break;
           case "this_year":
-            start = startOfYear(now);
-            end = endOfYear(now);
+            startLocal = startOfYear(nowWIB);
+            endLocal = endOfYear(nowWIB);
             break;
           default:
-            start = startOfDay(now);
-            end = endOfDay(now);
+            startLocal = startOfDay(nowWIB);
+            endLocal = endOfDay(nowWIB);
         }
     }
+
+    // Convert local WIB boundaries back to UTC ISO for database query
+    const start = new Date(startLocal.getTime() - WIB_OFFSET);
+    const end = new Date(endLocal.getTime() - WIB_OFFSET);
 
     // 1. Fetch Transactions
     let trxQuery = supabase

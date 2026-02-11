@@ -16,6 +16,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -123,6 +131,8 @@ export default function PayrollPage() {
     "Desember",
   ];
   const [monthFilter, setMonthFilter] = useState(monthNames[currentMonthIndex]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   // Format currency helper
   const formatCurrency = (val: number) => {
@@ -264,6 +274,11 @@ export default function PayrollPage() {
   const filteredPayroll = payrollRecords.filter((p) =>
     p.employeeName.toLowerCase().includes(searchQuery.toLowerCase()),
   );
+
+  const totalPages = Math.ceil(filteredPayroll.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedPayroll = filteredPayroll.slice(startIndex, endIndex);
 
   // Export handler
   const handleExport = () => {
@@ -436,7 +451,7 @@ export default function PayrollPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredPayroll.map((p) => (
+                paginatedPayroll.map((p) => (
                   <TableRow key={p.id}>
                     <TableCell>
                       <div>
@@ -535,6 +550,46 @@ export default function PayrollPage() {
             </TableBody>
           </Table>
         </CardContent>
+        {filteredPayroll.length > 0 && (
+          <div className="flex items-center justify-between p-4 border-t">
+            <p className="text-sm text-muted-foreground">
+              Menampilkan {startIndex + 1}-
+              {Math.min(endIndex, filteredPayroll.length)} dari{" "}
+              {filteredPayroll.length} data
+            </p>
+            <Pagination>
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    className={
+                      currentPage === 1
+                        ? "pointer-events-none opacity-50"
+                        : "cursor-pointer"
+                    }
+                  />
+                </PaginationItem>
+
+                <PaginationItem>
+                  <PaginationLink isActive>{currentPage}</PaginationLink>
+                </PaginationItem>
+
+                <PaginationItem>
+                  <PaginationNext
+                    onClick={() =>
+                      setCurrentPage((p) => Math.min(totalPages, p + 1))
+                    }
+                    className={
+                      currentPage === totalPages
+                        ? "pointer-events-none opacity-50"
+                        : "cursor-pointer"
+                    }
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          </div>
+        )}
       </Card>
 
       <AlertDialog

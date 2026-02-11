@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { usePathname } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -103,6 +104,7 @@ const statusConfig = {
 // Roles will be fetched dynamically from API
 
 export default function KaryawanPage() {
+  const pathname = usePathname();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [availableRoles, setAvailableRoles] = useState<Role[]>([]);
@@ -187,7 +189,7 @@ export default function KaryawanPage() {
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+  }, [fetchData, pathname]);
 
   // Handlers
   const handleOpenModal = (emp: Employee | null = null) => {

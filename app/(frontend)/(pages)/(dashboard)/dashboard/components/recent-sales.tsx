@@ -35,8 +35,10 @@ interface RecentSalesProps {
 
 export function RecentSales({ sales }: RecentSalesProps) {
   // Map API data to component display format
+  // Map API data to component display format
   const recentSales = sales.map((t) => ({
-    order: `#${t.id.slice(0, 8).toUpperCase()}`,
+    // Use transactionCode if available, else fallback to formatted ID
+    order: (t as any).transactionCode || `#${t.id.slice(0, 8).toUpperCase()}`,
     getFullId: t.id,
     name:
       t.items
@@ -71,7 +73,7 @@ export function RecentSales({ sales }: RecentSalesProps) {
           <TableBody>
             {recentSales.length > 0 ? (
               recentSales.map((sale) => (
-                <TableRow key={sale.order}>
+                <TableRow key={sale.getFullId}>
                   <TableCell className="py-2">
                     <div className="font-medium text-xs md:text-sm">
                       {sale.order}

@@ -8,22 +8,10 @@ export default function KasirLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // Register Service Worker for PWA
-  useEffect(() => {
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker
-        .register("/sw.js")
-        .then((registration) => {
-          console.log("[PWA] Service Worker registered:", registration.scope);
-        })
-        .catch((error) => {
-          console.error("[PWA] Service Worker registration failed:", error);
-        });
-    }
-  }, []);
+  // Service Worker handled by @ducanh2912/next-pwa automatically
 
   return (
-    <AuthGuard allowedRoles={["cashier"]}>
+    <AuthGuard allowedRoles={["cashier", "super_admin"]}>
       <div className="min-h-screen bg-slate-50">{children}</div>
     </AuthGuard>
   );

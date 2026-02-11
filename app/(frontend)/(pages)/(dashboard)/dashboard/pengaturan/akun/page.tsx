@@ -37,16 +37,19 @@ import {
 } from "lucide-react";
 import { useBranch, Employee } from "@/contexts/branch-context";
 import { supabase } from "@/lib/supabase";
+import { useRouter } from "next/navigation";
 
 // Extended employee info for Akun page
 interface ExtendedEmployee extends Employee {
   phone?: string;
   baseSalary?: number;
   hourlyRate?: number;
+  avatar_url?: string;
 }
 
 export default function AkunPage() {
-  const { activeEmployee, employees, userRole } = useBranch();
+  const { activeEmployee, employees, userRole, logout } = useBranch();
+  const router = useRouter();
 
   // Get full employee data
   const currentUser = activeEmployee
@@ -65,17 +68,12 @@ export default function AkunPage() {
   const [phone, setPhone] = useState(currentUser?.phone || "");
   const [avatar, setAvatar] = useState("");
 
-  // Load avatar from localStorage on mount
+  // Load avatar from DB on mount
   useEffect(() => {
-    if (currentUser?.id) {
-      const savedAvatar = localStorage.getItem(
-        `bestea-avatar-${currentUser.id}`,
-      );
-      if (savedAvatar) {
-        setAvatar(savedAvatar);
-      }
+    if (currentUser?.avatar_url) {
+      setAvatar(currentUser.avatar_url);
     }
-  }, [currentUser?.id]);
+  }, [currentUser?.avatar_url]);
 
   // Update form when currentUser changes
   useEffect(() => {
@@ -92,6 +90,7 @@ export default function AkunPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // Role display name
   const roleDisplayName =
@@ -106,38 +105,44 @@ export default function AkunPage() {
     setIsSaving(true);
 
     try {
-      // Update in Supabase
-      const { error } = await supabase
-        .from("employees")
-        .update({
-          name: name,
-          email: email,
-          phone: phone,
-        })
-        .eq("id", currentUser.id);
+      const response = await fetch("/api/account", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: currentUser.id,
+          name,
+          email,
+          phone,
+        }),
+      });
 
-      if (error) throw error;
+      const result = await response.json();
+      if (!response.ok)
+        throw new Error(result.error || "Gagal memperbarui profil");
 
       // Update activeEmployee in localStorage
       const storedEmployee = localStorage.getItem("bestea-active-employee");
       if (storedEmployee) {
         const parsed = JSON.parse(storedEmployee);
         parsed.name = name;
+        parsed.email = email;
+        parsed.phone = phone;
         localStorage.setItem("bestea-active-employee", JSON.stringify(parsed));
       }
 
       setIsEditingProfile(false);
       toast.success("Profil berhasil diperbarui");
-    } catch (error) {
+      window.location.reload(); // Refresh to update context
+    } catch (error: any) {
       console.error("Error updating profile:", error);
-      toast.error("Gagal memperbarui profil");
+      toast.error(error.message || "Gagal memperbarui profil");
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleChangePassword = () => {
-    if (!currentPassword || !newPassword || !confirmPassword) {
+  const handleChangePassword = async () => {
+    if (!newPassword || !confirmPassword) {
       toast.error("Harap lengkapi semua field");
       return;
     }
@@ -150,12 +155,33 @@ export default function AkunPage() {
       return;
     }
 
-    // Mock password change
-    toast.success("Password berhasil diubah");
-    setIsChangingPassword(false);
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
+    try {
+      const response = await fetch("/api/account", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: currentUser?.id,
+          password: newPassword,
+        }),
+      });
+
+      const result = await response.json();
+      if (!response.ok)
+        throw new Error(result.error || "Gagal mengubah password");
+
+      toast.success("Password berhasil diubah. Silakan login kembali.");
+      setIsChangingPassword(false);
+      setNewPassword("");
+      setConfirmPassword("");
+
+      // Logout and redirect
+      setTimeout(() => {
+        logout();
+        router.push("/login");
+      }, 2000);
+    } catch (error: any) {
+      toast.error(error.message || "Gagal mengubah password");
+    }
   };
 
   // Image upload
@@ -183,14 +209,37 @@ export default function AkunPage() {
 
     // Create preview URL
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const result = event.target?.result as string;
       setAvatar(result);
-      // Save to localStorage for persistence
-      if (currentUser?.id) {
-        localStorage.setItem(`bestea-avatar-${currentUser.id}`, result);
+
+      try {
+        const response = await fetch("/api/account", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: currentUser?.id,
+            avatar_url: result, // In production, upload to storage first
+          }),
+        });
+        if (!response.ok) throw new Error("Gagal mengupdate foto");
+
+        // Update activeEmployee in localStorage
+        const storedEmployee = localStorage.getItem("bestea-active-employee");
+        if (storedEmployee) {
+          const parsed = JSON.parse(storedEmployee);
+          parsed.avatar_url = result;
+          localStorage.setItem(
+            "bestea-active-employee",
+            JSON.stringify(parsed),
+          );
+        }
+
+        toast.success("Foto profil berhasil diperbarui");
+        window.location.reload(); // Refresh to update sidebar and context
+      } catch (error) {
+        toast.error("Gagal mengupdate foto profil");
       }
-      toast.success("Foto profil berhasil diperbarui");
     };
     reader.readAsDataURL(file);
   };
@@ -239,9 +288,9 @@ export default function AkunPage() {
                   className="h-24 w-24 cursor-pointer hover:opacity-80 transition-opacity"
                   onClick={handleAvatarClick}
                 >
-                  <AvatarImage src={avatar} />
-                  <AvatarFallback className="text-2xl bg-green-100 text-green-700">
-                    {getInitials(currentUser.name)}
+                  <AvatarImage src={avatar || undefined} alt="Profile" />
+                  <AvatarFallback className="text-xl bg-green-100 text-green-700">
+                    {currentUser?.name ? getInitials(currentUser.name) : "CN"}
                   </AvatarFallback>
                 </Avatar>
                 <Button
@@ -376,119 +425,112 @@ export default function AkunPage() {
           </Card>
 
           {/* Security Settings */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Key className="h-5 w-5" />
-                Keamanan
-              </CardTitle>
-              <CardDescription>
-                Kelola password dan keamanan akun
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Password</p>
-                  <p className="text-sm text-muted-foreground">
-                    Terakhir diubah: Tidak pernah
-                  </p>
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Key className="h-5 w-5" />
+                  Keamanan
+                </CardTitle>
+                <CardDescription>Kelola password akun Anda</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium">Password</p>
+                    <p className="text-sm text-muted-foreground">
+                      Amankan akun dengan password yang kuat
+                    </p>
+                  </div>
+                  <Dialog
+                    open={isChangingPassword}
+                    onOpenChange={setIsChangingPassword}
+                  >
+                    <DialogTrigger asChild>
+                      <Button variant="outline">Ubah Password</Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Ubah Password</DialogTitle>
+                        <DialogDescription>
+                          Masukkan password baru Anda
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4 py-4">
+                        <div className="grid gap-2">
+                          <Label htmlFor="new-password">Password Baru</Label>
+                          <div className="relative">
+                            <Input
+                              id="new-password"
+                              type={showNewPassword ? "text" : "password"}
+                              value={newPassword}
+                              onChange={(e) => setNewPassword(e.target.value)}
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="absolute right-0 top-0 h-full px-3"
+                              onClick={() =>
+                                setShowNewPassword(!showNewPassword)
+                              }
+                            >
+                              {showNewPassword ? (
+                                <EyeOff className="h-4 w-4" />
+                              ) : (
+                                <Eye className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="confirm-password">
+                            Konfirmasi Password Baru
+                          </Label>
+                          <div className="relative">
+                            <Input
+                              id="confirm-password"
+                              type={showConfirmPassword ? "text" : "password"}
+                              value={confirmPassword}
+                              onChange={(e) =>
+                                setConfirmPassword(e.target.value)
+                              }
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="absolute right-0 top-0 h-full px-3"
+                              onClick={() =>
+                                setShowConfirmPassword(!showConfirmPassword)
+                              }
+                            >
+                              {showConfirmPassword ? (
+                                <EyeOff className="h-4 w-4" />
+                              ) : (
+                                <Eye className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button
+                          variant="outline"
+                          onClick={() => setIsChangingPassword(false)}
+                        >
+                          Batal
+                        </Button>
+                        <Button onClick={handleChangePassword}>
+                          Simpan Password
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
                 </div>
-                <Dialog
-                  open={isChangingPassword}
-                  onOpenChange={setIsChangingPassword}
-                >
-                  <DialogTrigger asChild>
-                    <Button variant="outline">Ubah Password</Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Ubah Password</DialogTitle>
-                      <DialogDescription>
-                        Masukkan password lama dan password baru Anda
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4 py-4">
-                      <div className="grid gap-2">
-                        <Label htmlFor="current-password">
-                          Password Saat Ini
-                        </Label>
-                        <div className="relative">
-                          <Input
-                            id="current-password"
-                            type={showCurrentPassword ? "text" : "password"}
-                            value={currentPassword}
-                            onChange={(e) => setCurrentPassword(e.target.value)}
-                          />
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="absolute right-0 top-0 h-full px-3"
-                            onClick={() =>
-                              setShowCurrentPassword(!showCurrentPassword)
-                            }
-                          >
-                            {showCurrentPassword ? (
-                              <EyeOff className="h-4 w-4" />
-                            ) : (
-                              <Eye className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="new-password">Password Baru</Label>
-                        <div className="relative">
-                          <Input
-                            id="new-password"
-                            type={showNewPassword ? "text" : "password"}
-                            value={newPassword}
-                            onChange={(e) => setNewPassword(e.target.value)}
-                          />
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="absolute right-0 top-0 h-full px-3"
-                            onClick={() => setShowNewPassword(!showNewPassword)}
-                          >
-                            {showNewPassword ? (
-                              <EyeOff className="h-4 w-4" />
-                            ) : (
-                              <Eye className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="confirm-password">
-                          Konfirmasi Password Baru
-                        </Label>
-                        <Input
-                          id="confirm-password"
-                          type="password"
-                          value={confirmPassword}
-                          onChange={(e) => setConfirmPassword(e.target.value)}
-                        />
-                      </div>
-                    </div>
-                    <DialogFooter>
-                      <Button
-                        variant="outline"
-                        onClick={() => setIsChangingPassword(false)}
-                      >
-                        Batal
-                      </Button>
-                      <Button onClick={handleChangePassword}>
-                        Simpan Password
-                      </Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
     </div>

@@ -1,6 +1,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { getJakartaDate } from "@/lib/date-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -82,10 +83,12 @@ export async function GET(request: NextRequest) {
       let scheduledCount = 0;
       const daysInMonth = new Date(parseInt(yyyy), parseInt(mm), 0).getDate();
       
-      const now = new Date();
+      const now = getJakartaDate();
       let checkUntilDay = daysInMonth;
       if (now.getFullYear() === parseInt(yyyy) && now.getMonth() + 1 === parseInt(mm)) {
-        checkUntilDay = now.getDate();
+        // Exclude today from "potential absence" check. 
+        // Only count up to yesterday to allow today's attendance to happen.
+        checkUntilDay = Math.max(0, now.getDate() - 1); 
       } else if (new Date(parseInt(yyyy), parseInt(mm) - 1, 1) > now) {
          checkUntilDay = 0;
       }

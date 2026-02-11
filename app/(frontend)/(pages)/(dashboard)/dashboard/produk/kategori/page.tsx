@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+
 import {
   Card,
   CardContent,
@@ -35,18 +36,37 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { initialCategories } from "../data/mock-data-products";
 
 export default function CategoryPage() {
-  const [categories, setCategories] = useState(initialCategories);
+  const [categories, setCategories] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [editingCategory, setEditingCategory] = useState<any>(null);
   const [formData, setFormData] = useState({
     name: "",
     description: "",
   });
   const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const fetchCategories = async () => {
+    try {
+      setIsLoading(true);
+      const res = await fetch("/api/categories", { cache: "no-store" });
+      if (!res.ok) throw new Error("Failed to fetch");
+      const data = await res.json();
+      setCategories(data);
+    } catch (error) {
+      console.error("Error fetching categories:", error);
+      toast.error("Gagal mengambil data kategori");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCategories();
+  }, []);
 
   const filteredCategories = categories.filter((cat) =>
     cat.name.toLowerCase().includes(searchQuery.toLowerCase()),
@@ -69,36 +89,56 @@ export default function CategoryPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.name) {
       toast.error("Nama kategori harus diisi");
       return;
     }
 
-    if (editingCategory) {
-      setCategories(
-        categories.map((c) =>
-          c.id === editingCategory.id ? { ...c, ...formData } : c,
-        ),
+    try {
+      const url = "/api/categories";
+      const method = editingCategory ? "PUT" : "POST";
+      const body = editingCategory
+        ? { ...formData, id: editingCategory.id }
+        : formData;
+
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) throw new Error("Failed to save");
+
+      toast.success(
+        editingCategory
+          ? "Kategori berhasil diperbarui"
+          : "Kategori baru berhasil ditambahkan",
       );
-      toast.success("Kategori berhasil diperbarui");
-    } else {
-      const newCat = {
-        id: `cat_${Date.now()}`,
-        ...formData,
-        productCount: 0,
-      };
-      setCategories([...categories, newCat]);
-      toast.success("Kategori baru berhasil ditambahkan");
+      setIsModalOpen(false);
+      fetchCategories();
+    } catch (error) {
+      console.error("Error saving category:", error);
+      toast.error("Gagal menyimpan kategori");
     }
-    setIsModalOpen(false);
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (deleteId) {
-      setCategories(categories.filter((c) => c.id !== deleteId));
-      toast.success("Kategori berhasil dihapus");
-      setDeleteId(null);
+      try {
+        const res = await fetch(`/api/categories?id=${deleteId}`, {
+          method: "DELETE",
+        });
+
+        if (!res.ok) throw new Error("Failed to delete");
+
+        toast.success("Kategori berhasil dihapus");
+        setDeleteId(null);
+        fetchCategories();
+      } catch (error) {
+        console.error("Error deleting category:", error);
+        toast.error("Gagal menghapus kategori");
+      }
     }
   };
 

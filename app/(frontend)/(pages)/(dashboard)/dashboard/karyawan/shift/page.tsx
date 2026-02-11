@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { Plus, CalendarIcon } from "lucide-react";
+import { Plus, CalendarIcon, Save } from "lucide-react";
 import { toast } from "sonner";
 import {
   Select,
@@ -357,13 +357,68 @@ export default function ShiftPage() {
       );
       setAllWeeklyShifts(newAllShifts);
       toast.success("Jadwal Berhasil Disalin", {
-        description: `Jadwal dari minggu (${prevWeek}) telah disalin ke minggu ini.`,
+        description: `Jadwal dari minggu (${prevWeek}) telah disalin ke minggu ini. Silakan simpan perubahan.`,
       });
     } else {
       toast.info("Minggu Terawal", {
         description:
           "Ini adalah minggu terawal yang tersedia, tidak ada jadwal sebelumnya.",
       });
+    }
+  };
+
+  const handleBulkSave = async () => {
+    setIsLoading(true);
+    const weekStart = getWeekStartDate(currentWeek);
+    const currentShifts = allWeeklyShifts[currentWeek];
+    const schedulesToSave: any[] = [];
+
+    // Transform local state to API payload
+    Object.entries(currentShifts).forEach(([empId, weekData]) => {
+      const emp = employees.find((e) => e.id === empId);
+      weekData.forEach((dayShift, dayIdx) => {
+        let start_time = null;
+        let end_time = null;
+
+        if (dayShift.type !== "Libur" && dayShift.time !== "-") {
+          const parts = dayShift.time.split(" - ");
+          if (parts.length === 2) {
+            start_time = parts[0];
+            end_time = parts[1];
+          }
+        }
+
+        schedulesToSave.push({
+          employee_id: empId,
+          branch_id: currentBranch?.id || emp?.branchId,
+          week_start: weekStart,
+          day_of_week: dayIdx,
+          shift_type: dayShift.type,
+          start_time,
+          end_time,
+        });
+      });
+    });
+
+    try {
+      const response = await fetch("/api/shift-schedules", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ schedules: schedulesToSave }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to bulk save");
+      }
+
+      toast.success("Jadwal Berhasil Disimpan", {
+        description: "Semua perubahan shift minggu ini telah disimpan.",
+      });
+    } catch (error) {
+      console.error("Bulk save error:", error);
+      toast.error("Gagal Menyimpan Jadwal");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -436,6 +491,15 @@ export default function ShiftPage() {
           <Button variant="outline" onClick={handleCopyPrevious}>
             <CalendarIcon className="mr-2 h-4 w-4" />
             Copy Jadwal Lalu
+          </Button>
+          <Button
+            variant="default"
+            className="bg-blue-600 hover:bg-blue-700"
+            onClick={handleBulkSave}
+            disabled={isLoading}
+          >
+            <Save className="mr-2 h-4 w-4" />
+            {isLoading ? "Menyimpan..." : "Simpan Perubahan"}
           </Button>
           <Button
             onClick={handleNewRecordClick}

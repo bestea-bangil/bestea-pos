@@ -5,14 +5,13 @@ import { CopySlash, DollarSign, TrendingUp, Wallet } from "lucide-react";
 interface SummaryProps {
   omzet: number;
   expenses: number;
-  transactions: number;
 }
 
-export function ReportSummary({ omzet, expenses, transactions }: SummaryProps) {
+export function ReportSummary({ omzet, expenses }: SummaryProps) {
   const profit = omzet - expenses;
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">Total Omzet</CardTitle>
@@ -51,17 +50,6 @@ export function ReportSummary({ omzet, expenses, transactions }: SummaryProps) {
           <p className="text-xs text-muted-foreground">
             Omzet dikurangi Pengeluaran
           </p>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Total Transaksi</CardTitle>
-          <TrendingUp className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{transactions}</div>
-          <p className="text-xs text-muted-foreground">Order selesai</p>
         </CardContent>
       </Card>
     </div>

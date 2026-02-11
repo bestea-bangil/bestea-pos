@@ -25,7 +25,6 @@ export async function GET() {
     if (error) throw error;
     return NextResponse.json(data);
   } catch (error) {
-    console.error("[API Roles] Error:", error);
     return NextResponse.json({ error: "Failed to fetch roles" }, { status: 500 });
   }
 }
@@ -44,7 +43,6 @@ export async function POST(request: Request) {
     if (error) throw error;
     return NextResponse.json(data);
   } catch (error) {
-    console.error("[API Roles] Create Error:", error);
     return NextResponse.json({ error: "Failed to create role" }, { status: 500 });
   }
 }
@@ -62,7 +60,6 @@ export async function PUT(request: Request) {
     if (error) throw error;
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("[API Roles] Update Error:", error);
     return NextResponse.json({ error: "Failed to update role" }, { status: 500 });
   }
 }
@@ -77,7 +74,6 @@ export async function DELETE(request: Request) {
     if (error) throw error;
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("[API Roles] Delete Error:", error);
     return NextResponse.json({ error: "Failed to delete role" }, { status: 500 });
   }
 }

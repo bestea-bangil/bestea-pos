@@ -64,7 +64,7 @@ import { CashOutModal } from "./components/cash-out-modal";
 import { SizeSelectionModal } from "./components/size-selection-modal";
 import { PrinterSettingsModal } from "./components/printer-settings-modal";
 import { useBranch } from "@/contexts/branch-context";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { toast } from "sonner";
 
 import {
@@ -174,7 +174,8 @@ function ConnectPrinterButton() {
 
 function KasirContent() {
   const router = useRouter();
-  const { currentBranch, logout, activeEmployee } = useBranch();
+  const pathname = usePathname();
+  const { currentBranch, logout, activeEmployee, isSuperAdmin } = useBranch();
 
   const handleLogout = () => {
     logout();
@@ -229,12 +230,17 @@ function KasirContent() {
       setIsDataLoading(true);
       try {
         const [prodRes, catRes] = await Promise.all([
-          fetch("/api/products"),
-          fetch("/api/categories"),
+          fetch("/api/products", { cache: "no-store" }),
+          fetch("/api/categories", { cache: "no-store" }),
         ]);
         if (prodRes.ok) {
           const pData = await prodRes.json();
-          setProducts(pData.filter((p: Product) => p.status === "active"));
+          if (Array.isArray(pData)) {
+            setProducts(pData.filter((p: Product) => p.status === "active"));
+          } else {
+            console.error("Invalid products data", pData);
+            setProducts([]);
+          }
         }
         if (catRes.ok) setCategories(await catRes.json());
       } catch (error) {
@@ -245,7 +251,7 @@ function KasirContent() {
       }
     };
     fetchData();
-  }, []);
+  }, [pathname]);
 
   const handleConfirmCashOut = (amount: number, description: string) => {
     // 1. Add to Shift Data (Local Cashier State)
@@ -380,50 +386,113 @@ function KasirContent() {
     };
 
     try {
-      // 1. Save to Supabase (Database) via TransactionContext (which now calls API)
-      const savedTransaction = await addTransactionToDB(
-        transactionData,
-        transactionItems,
-      );
+      let savedTransaction;
+
+      // SIMULATION MODE: If Super Admin loops simulation (no shift open), do not save to DB
+      if (isSuperAdmin && !isShiftOpen) {
+        console.log("Processing Simulation Transaction (Not Saved to DB)");
+        savedTransaction = {
+          id: `sim-${Date.now()}`,
+          transactionCode: `#SIM-${Math.floor(Math.random() * 1000)
+            .toString()
+            .padStart(3, "0")}`,
+          date: new Date().toISOString(),
+          branchId: currentBranch?.id || "unknown",
+          branchName: currentBranch?.name || "Cabang Bestea",
+          cashierId: activeEmployee?.id,
+          cashierName: activeEmployee?.name || "Super Admin",
+          customerName: "Pelanggan Simulasi",
+          totalAmount: totalPrice,
+          paymentMethod: paymentMethod,
+          amountPaid: amountPaid,
+          changeAmount: amountPaid - totalPrice,
+          status: "completed" as const,
+          items: transactionItems,
+        };
+        toast.info("Mode Simulasi: Transaksi tidak disimpan ke database", {
+          duration: 4000,
+        });
+      } else {
+        // NORMAL MODE: Save to Supabase (Database) via TransactionContext
+        savedTransaction = await addTransactionToDB(
+          transactionData,
+          transactionItems,
+        );
+      }
 
       if (savedTransaction) {
-        // 2. Add to Local Shift Data
-        const shiftTransaction = {
-          id: savedTransaction.id,
+        // 2. Add to Local Shift Data (only if shift is open, but for simulation we might want to show it locally?
+        // Actually addTransactionToShift updates the shift state, which might be null if no shift.
+        // But let's try to update UI if possible, or just proceed to print.
+
+        if (isShiftOpen) {
+          const shiftTransaction = {
+            id: savedTransaction.id,
+            transactionCode: savedTransaction.transactionCode,
+            date: new Date(savedTransaction.date).toLocaleDateString("id-ID", {
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+            }),
+            paymentMethod: savedTransaction.paymentMethod as "cash" | "qris",
+            total: savedTransaction.totalAmount,
+            time: new Date(savedTransaction.date).toLocaleTimeString("id-ID", {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+            status: (savedTransaction.status === "void"
+              ? "cancelled"
+              : "completed") as "completed" | "pending" | "cancelled",
+            items: savedTransaction.items.map((item: any) => ({
+              productId: item.productId,
+              name: item.productName,
+              price: item.price,
+              quantity: item.quantity,
+              variant: item.variant || "",
+            })),
+            employeeId: savedTransaction.cashierId,
+            employeeName: savedTransaction.cashierName,
+            branchName: savedTransaction.branchName,
+            cashierName: savedTransaction.cashierName,
+          };
+          addTransactionToShift(shiftTransaction);
+        }
+
+        // 3. Stock Reduction is now handled by API (skipped in simulation)
+
+        // 4. Print Receipt
+        // Construct the object expected by printReceipt
+        const receiptData = {
+          ...savedTransaction,
+          // Ensure dates are strings or Date objects as expected by printReceipt
+          // The mock simulation uses ISO string for date, printReceipt probably handles it or needs Date object?
+          // Let's check printReceipt signature or usage.
+          // Previous usage passed `shiftTransaction` which has formatted date/time strings.
+          // Let's create a receipt-compatible object.
+          transactionCode: savedTransaction.transactionCode,
           date: new Date(savedTransaction.date).toLocaleDateString("id-ID", {
             day: "numeric",
             month: "short",
             year: "numeric",
           }),
-          paymentMethod: savedTransaction.paymentMethod as "cash" | "qris",
-          total: savedTransaction.totalAmount,
           time: new Date(savedTransaction.date).toLocaleTimeString("id-ID", {
             hour: "2-digit",
             minute: "2-digit",
           }),
-          status: (savedTransaction.status === "void"
-            ? "cancelled"
-            : "completed") as "completed" | "pending" | "cancelled",
-          items: savedTransaction.items.map((item) => ({
+          items: savedTransaction.items.map((item: any) => ({
             productId: item.productId,
             name: item.productName,
             price: item.price,
             quantity: item.quantity,
             variant: item.variant || "",
           })),
-          employeeId: savedTransaction.cashierId,
-          employeeName: savedTransaction.cashierName,
-          branchName: savedTransaction.branchName,
+          total: savedTransaction.totalAmount, // shiftTransaction uses 'total'
           cashierName: savedTransaction.cashierName,
+          paymentMethod: savedTransaction.paymentMethod,
         };
 
-        addTransactionToShift(shiftTransaction);
-
-        // 3. Stock Reduction is now handled by API
-
-        // 4. Print Receipt
         if (isConnected) {
-          await printReceipt(shiftTransaction);
+          await printReceipt(receiptData);
         }
       }
     } catch (error) {
@@ -450,9 +519,15 @@ function KasirContent() {
     minimumFractionDigits: 0,
   });
 
-  const currentOrderNumber = `Order #${String(
-    (shiftData?.transactions?.length || 0) + 1,
-  ).padStart(4, "0")}`;
+  const { transactions: allTransactions } = useTransactions();
+
+  const dailyTransactions = allTransactions.filter(
+    (t) =>
+      new Date(t.date).toDateString() === new Date().toDateString() &&
+      t.status === "completed",
+  );
+
+  const currentOrderNumber = `Order #${String(dailyTransactions.length + 1).padStart(3, "0")}`;
 
   if (isShiftLoading || isDataLoading) {
     return (
@@ -467,7 +542,7 @@ function KasirContent() {
   return (
     <div className="flex flex-col h-full overflow-hidden bg-slate-50 rounded-lg border border-slate-200 relative">
       {/* Shift Closed Overlay */}
-      {!isShiftOpen && !isShiftLoading && (
+      {!isShiftOpen && !isShiftLoading && !isSuperAdmin && (
         <div className="absolute inset-0 z-50 bg-white/60 backdrop-blur-sm flex flex-col items-center justify-center text-center p-4">
           <div className="bg-white p-8 rounded-2xl shadow-xl border border-slate-200 max-w-md w-full">
             <div className="bg-orange-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6">

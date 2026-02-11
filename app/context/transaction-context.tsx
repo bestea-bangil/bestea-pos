@@ -41,6 +41,7 @@ export interface Transaction {
   changeAmount?: number;
   status: "completed" | "void" | "pending";
   shiftSessionId?: string;
+  transactionCode?: string;
 }
 
 export interface Expense {
@@ -68,14 +69,14 @@ interface TransactionContextType {
   voidTransaction: (id: string) => Promise<void>;
   refreshTransactions: () => Promise<void>;
   refreshExpenses: () => Promise<void>;
-  getTransactionsByBranch: (branchName: string) => Transaction[];
-  getExpensesByBranch: (branchName: string) => Expense[];
-  getDailyRevenue: (date: Date, branchName?: string) => number;
-  getMonthlyRevenue: (date: Date, branchName?: string) => number;
-  getTotalRevenue: (branchName?: string) => number;
+  getTransactionsByBranch: (branchIdOrName: string) => Transaction[];
+  getExpensesByBranch: (branchIdOrName: string) => Expense[];
+  getDailyRevenue: (date: Date, branchIdOrName?: string) => number;
+  getMonthlyRevenue: (date: Date, branchIdOrName?: string) => number;
+  getTotalRevenue: (branchIdOrName?: string) => number;
   getTopProducts: (
     limit?: number,
-    branchName?: string,
+    branchIdOrName?: string,
   ) => { name: string; sold: number; revenue: number }[];
   getBranchPerformance: () => {
     branch: string;
@@ -125,6 +126,7 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
             branches?: { name: string };
             transaction_items?: DBTransactionItem[];
             shift_session_id?: string;
+            transaction_code?: string;
           },
         ) => ({
           id: t.id,
@@ -140,6 +142,7 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
           changeAmount: t.change_amount ? Number(t.change_amount) : undefined,
           status: t.status as "completed" | "void" | "pending",
           shiftSessionId: t.shift_session_id,
+          transactionCode: t.transaction_code,
           items: (t.transaction_items || []).map((item) => ({
             productId: item.product_id || "",
             productName: item.product_name,
@@ -152,9 +155,7 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
       );
 
       setTransactions(formattedTransactions);
-    } catch (error) {
-      console.error("Error fetching transactions:", error);
-    }
+    } catch (error) {}
   }, []);
 
   // Fetch expenses from Supabase
@@ -193,9 +194,7 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
       );
 
       setExpenses(formattedExpenses);
-    } catch (error) {
-      console.error("Error fetching expenses:", error);
-    }
+    } catch (error) {}
   }, []);
 
   // Initial load
@@ -210,17 +209,29 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
 
   // Realtime subscriptions
   useEffect(() => {
-    const transactionChannel = supabase
-      .channel("transactions-changes")
+    let transactionTimeout: NodeJS.Timeout;
+
+    // Debounced fetch to handle rapid updates and race conditions (trx vs items)
+    const debouncedRefreshTransactions = () => {
+      clearTimeout(transactionTimeout);
+      transactionTimeout = setTimeout(() => {
+        console.log("Refreshing transactions due to realtime update...");
+        fetchTransactions();
+      }, 1000); // 1s delay to ensure all items are inserted
+    };
+
+    const channel = supabase
+      .channel("db-changes")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "transactions" },
-        () => fetchTransactions(),
+        debouncedRefreshTransactions,
       )
-      .subscribe();
-
-    const expenseChannel = supabase
-      .channel("expenses-changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "transaction_items" },
+        debouncedRefreshTransactions,
+      )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "expenses" },
@@ -229,8 +240,8 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(transactionChannel);
-      supabase.removeChannel(expenseChannel);
+      supabase.removeChannel(channel);
+      clearTimeout(transactionTimeout);
     };
   }, [fetchTransactions, fetchExpenses]);
 
@@ -240,11 +251,6 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
       items: TransactionItem[],
     ) => {
       try {
-        console.log(
-          "[TransactionContext] Adding transaction via API:",
-          trxData,
-        );
-
         // Call Backend API
         const response = await fetch("/api/transactions", {
           method: "POST",
@@ -277,19 +283,16 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
 
         if (!response.ok) {
           const errorData = await response.json();
-          console.error("[TransactionContext] API Error:", errorData);
           throw new Error(errorData.error || "Failed to save transaction");
         }
 
         const savedTransaction = await response.json();
-        console.log("[TransactionContext] API Success:", savedTransaction);
 
         // Optimistic update or wait for realtime (realtime subscription handles this usually)
         // fetchTransactions();
 
         return savedTransaction;
       } catch (error) {
-        console.error("Error adding transaction:", error);
         return null;
       }
     },
@@ -329,25 +332,39 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
 
   // Analytics functions (keep same logic, just use state data)
   const getTransactionsByBranch = useCallback(
-    (branchName: string) => {
-      if (!branchName || branchName === "Semua Cabang") return transactions;
-      return transactions.filter((t) => t.branchName === branchName);
+    (branchIdOrName: string) => {
+      if (
+        !branchIdOrName ||
+        branchIdOrName === "Semua Cabang" ||
+        branchIdOrName === "all"
+      )
+        return transactions;
+      return transactions.filter(
+        (t) => t.branchName === branchIdOrName || t.branchId === branchIdOrName,
+      );
     },
     [transactions],
   );
 
   const getExpensesByBranch = useCallback(
-    (branchName: string) => {
-      if (!branchName || branchName === "Semua Cabang") return expenses;
-      return expenses.filter((e) => e.branchName === branchName);
+    (branchIdOrName: string) => {
+      if (
+        !branchIdOrName ||
+        branchIdOrName === "Semua Cabang" ||
+        branchIdOrName === "all"
+      )
+        return expenses;
+      return expenses.filter(
+        (e) => e.branchName === branchIdOrName || e.branchId === branchIdOrName,
+      );
     },
     [expenses],
   );
 
   const getDailyRevenue = useCallback(
-    (date: Date, branchName?: string) => {
-      const relevantTrx = branchName
-        ? getTransactionsByBranch(branchName)
+    (date: Date, branchIdOrName?: string) => {
+      const relevantTrx = branchIdOrName
+        ? getTransactionsByBranch(branchIdOrName)
         : transactions;
       return relevantTrx
         .filter(
@@ -359,9 +376,9 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
   );
 
   const getMonthlyRevenue = useCallback(
-    (date: Date, branchName?: string) => {
-      const relevantTrx = branchName
-        ? getTransactionsByBranch(branchName)
+    (date: Date, branchIdOrName?: string) => {
+      const relevantTrx = branchIdOrName
+        ? getTransactionsByBranch(branchIdOrName)
         : transactions;
       return relevantTrx
         .filter(
@@ -374,9 +391,9 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
   );
 
   const getTotalRevenue = useCallback(
-    (branchName?: string) => {
-      const relevantTrx = branchName
-        ? getTransactionsByBranch(branchName)
+    (branchIdOrName?: string) => {
+      const relevantTrx = branchIdOrName
+        ? getTransactionsByBranch(branchIdOrName)
         : transactions;
       return relevantTrx
         .filter((t) => t.status === "completed")
@@ -386,9 +403,9 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
   );
 
   const getTopProducts = useCallback(
-    (limit = 5, branchName?: string) => {
-      const relevantTrx = branchName
-        ? getTransactionsByBranch(branchName)
+    (limit = 5, branchIdOrName?: string) => {
+      const relevantTrx = branchIdOrName
+        ? getTransactionsByBranch(branchIdOrName)
         : transactions;
       const productMap = new Map<
         string,

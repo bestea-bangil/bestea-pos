@@ -47,6 +47,7 @@ export async function GET() {
       hourlyRate: Number(e.hourly_rate),
       deductionAmount: Number(e.deduction_amount || 0),
       pin: e.pin,
+      avatar_url: e.avatar_url,
     }));
 
     return NextResponse.json(formatted);

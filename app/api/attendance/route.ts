@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { createClient } from "@supabase/supabase-js";
+import { getJakartaYYYYMMDD } from "@/lib/date-utils";
 
 export async function GET(request: Request) {
   try {
@@ -11,7 +13,7 @@ export async function GET(request: Request) {
 
     // Mode: Check Status for specific employee today
     if (checkStatus === "true" && employeeId) {
-       const today = new Date().toISOString().split("T")[0];
+       const today = getJakartaYYYYMMDD();
        const { data, error } = await supabase
         .from("attendance_records")
         .select("*")
@@ -73,7 +75,6 @@ export async function GET(request: Request) {
 
     return NextResponse.json(formattedData);
   } catch (error: any) {
-    console.error("Error fetching attendance:", error);
     return NextResponse.json(
       { error: error.message || "Failed to fetch attendance" },
       { status: 500 }
@@ -94,10 +95,26 @@ export async function POST(request: Request) {
       );
     }
 
-    const today = new Date().toISOString().split("T")[0];
-    const recordDate = date || today;
+    // Use provided date or derive from checkInTime or use current server date
+    // Priority: date param -> checkInTime date -> current server date
+    let recordDate = date;
+    let finalCheckInTime = checkInTime;
 
-    // Check if already clocked in today
+    if (!finalCheckInTime) {
+      finalCheckInTime = new Date().toISOString();
+    }
+    
+    if (!recordDate) {
+      // If checkInTime was provided, use its date. Otherwise use today.
+      // We adjust for timezone if needed, but simple ISO split is usually safer for "server day"
+      recordDate = getJakartaYYYYMMDD(finalCheckInTime ? new Date(finalCheckInTime) : undefined);
+    }
+
+    // Check if already OPEN session exists (not just for "today", but generally if they forgot to clock out)
+    // Actually, usually we limit to "one per day" or "one open session". 
+    // Let's stick to "one per day" to avoid blocking if they forgot to clock out yesterday (that should be auto-closed or handled).
+    // But for "clock in reliability", checking strictly by date is fine for CREATION.
+
     const { data: existing } = await supabase
         .from("attendance_records")
         .select("id")
@@ -119,9 +136,9 @@ export async function POST(request: Request) {
           employee_id: employeeId,
           branch_id: branchId,
           date: recordDate,
-          check_in: checkInTime || new Date(recordDate).toISOString(), // Default to 00:00 UTC of target date (07:00 WIB)
+          check_in: finalCheckInTime,
           status: status || "Hadir",
-          shift: shift || "Pagi", // Default to Pagi for now
+          shift: shift || "Pagi", 
           notes: notes || "",
         },
       ])
@@ -132,7 +149,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json(data);
   } catch (error: any) {
-    console.error("Error creating attendance:", error);
     return NextResponse.json(
       { error: error.message || "Failed to create attendance" },
       { status: 500 }
@@ -151,33 +167,36 @@ export async function PUT(request: Request) {
 
      if (action === "clock_out") {
          // Clock Out Logic
-         const today = new Date().toISOString().split("T")[0];
          const { status: bodyStatus } = body;
          
          // Find record if ID not provided
          let recordId = id;
+         
          if (!recordId) {
-             const { data: todayRecord } = await supabase
+             // Find LATEST OPEN session for this employee
+             const { data: openRecord } = await supabase
                 .from("attendance_records")
                 .select("id")
                 .eq("employee_id", employeeId)
-                .eq("date", today)
-                .single();
-            
-            if (!todayRecord) {
-                return NextResponse.json({ error: "No attendance record found for today" }, { status: 404 });
+                .is("check_out", null) // Look for open session
+                .order("created_at", { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+            if (!openRecord) {
+                // Determine if we should fail or perhaps they are already clocked out?
+                // For user feedback, it's better to say "No active shift found".
+                return NextResponse.json({ error: "Tidak ada sesi absen aktif yang ditemukan." }, { status: 404 });
             }
-            recordId = todayRecord.id;
+            recordId = openRecord.id;
          }
 
          const updateData: any = {
              check_out: checkOutTime || new Date().toISOString(),
-             notes: notes 
          };
 
-         if (bodyStatus) {
-             updateData.status = bodyStatus;
-         }
+         if (notes) updateData.notes = notes;
+         if (bodyStatus) updateData.status = bodyStatus;
 
          const { data, error } = await supabase
             .from("attendance_records")
@@ -193,7 +212,7 @@ export async function PUT(request: Request) {
          // Generic Update (Admin Edit)
          const { data, error } = await supabase
             .from("attendance_records")
-            .update(body) // Be careful with what's in body
+            .update(body) 
             .eq("id", id)
             .select()
             .single();
@@ -201,9 +220,7 @@ export async function PUT(request: Request) {
          if (error) throw error;
          return NextResponse.json(data);
      }
-
   } catch (error: any) {
-    console.error("Error updating attendance:", error);
     return NextResponse.json(
       { error: error.message || "Failed to update attendance" },
       { status: 500 }
@@ -220,7 +237,18 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: "Missing ID" }, { status: 400 });
     }
 
-    const { error } = await supabase
+    // Verify admin role or use service role client
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        auth: {
+          persistSession: false,
+        },
+      }
+    );
+
+    const { error } = await supabaseAdmin
       .from("attendance_records")
       .delete()
       .eq("id", id);
@@ -229,7 +257,6 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
-    console.error("Error deleting attendance:", error);
     return NextResponse.json(
       { error: error.message || "Failed to delete attendance" },
       { status: 500 }

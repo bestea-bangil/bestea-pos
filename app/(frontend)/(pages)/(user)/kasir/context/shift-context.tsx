@@ -100,7 +100,7 @@ export function ShiftProvider({ children }: { children: ReactNode }) {
         const parsed = JSON.parse(savedBranch);
         branchName = parsed.name || branchName;
       } catch (e) {
-        console.error("Failed to parse saved branch", e);
+        // silently ignore parse errors
       }
     }
 
@@ -137,10 +137,6 @@ export function ShiftProvider({ children }: { children: ReactNode }) {
   ) => {
     try {
       // 1. Call API to create session
-      console.log("[ShiftContext] calling /api/shift-sessions with", {
-        branchId,
-        employeeId: employee.id,
-      });
       const res = await fetch("/api/shift-sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -178,7 +174,6 @@ export function ShiftProvider({ children }: { children: ReactNode }) {
       setIsShiftOpen(true);
       return session; // Return for caller if needed
     } catch (error) {
-      console.error("Failed to open shift session", error);
       throw error; // Re-throw to let Modal handle UI
     }
   };
@@ -217,7 +212,6 @@ export function ShiftProvider({ children }: { children: ReactNode }) {
       }));
       setIsShiftOpen(false);
     } catch (error) {
-      console.error("Failed to close shift session", error);
       // We still close locally to avoid getting stuck
       setIsShiftOpen(false);
     }

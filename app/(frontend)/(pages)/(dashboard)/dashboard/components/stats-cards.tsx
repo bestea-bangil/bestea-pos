@@ -69,19 +69,41 @@ interface StatsCardsProps {
   stats: {
     revenue: number;
     revenueGrowth: number;
-    transactionCount: number; // API returns transactionCount
+    transactionCount: number;
     transactionGrowth: number;
     activeBranches: number;
     productsSold: number;
     productGrowth: number;
   };
+  period: string;
 }
 
-export function StatsCards({ stats }: StatsCardsProps) {
+export function StatsCards({ stats, period }: StatsCardsProps) {
+  const getPeriodLabel = (p: string) => {
+    switch (p) {
+      case "today":
+        return "Hari Ini";
+      case "yesterday":
+        return "Kemarin";
+      case "this_week":
+        return "Minggu Ini";
+      case "this_month":
+        return "Bulan Ini";
+      case "this_year":
+        return "Tahun Ini";
+      case "30d":
+        return "30 Hari Terakhir";
+      default:
+        return "Hari Ini";
+    }
+  };
+
+  const label = getPeriodLabel(period);
+
   return (
     <div className="grid gap-3 md:gap-4 grid-cols-2 lg:grid-cols-4">
       <StatsCard
-        title="Omset Hari Ini"
+        title={`Omset ${label}`}
         value={formatter.format(stats.revenue)}
         change={stats.revenueGrowth}
         icon={<DollarSign className="h-4 w-4 text-muted-foreground" />}

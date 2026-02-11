@@ -24,7 +24,6 @@ export async function GET() {
 
     return NextResponse.json(data);
   } catch (error) {
-    console.error("[API Branches] Error fetching:", error);
     return NextResponse.json(
       { error: "Failed to fetch branches" },
       { status: 500 }
@@ -47,7 +46,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json(data);
   } catch (error) {
-    console.error("[API Branches] Error creating:", error);
     return NextResponse.json(
       { error: "Failed to create branch" },
       { status: 500 }
@@ -75,7 +73,6 @@ export async function PUT(request: Request) {
 
     return NextResponse.json(data);
   } catch (error) {
-    console.error("[API Branches] Error updating:", error);
     return NextResponse.json(
       { error: "Failed to update branch" },
       { status: 500 }
@@ -101,7 +98,6 @@ export async function DELETE(request: Request) {
 
         return NextResponse.json({ success: true });
     } catch (error) {
-        console.error("[API Branches] Error deleting:", error);
         return NextResponse.json(
             { error: "Failed to delete branch" },
             { status: 500 }
