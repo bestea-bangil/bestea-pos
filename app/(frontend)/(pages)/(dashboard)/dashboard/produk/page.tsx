@@ -126,7 +126,7 @@ export default function ProductPage() {
   useEffect(() => {
     fetchData();
 
-    // Realtime subscription
+    // 1. Realtime subscription
     const channel = supabase
       .channel("product-dashboard-changes")
       .on(
@@ -138,8 +138,21 @@ export default function ProductPage() {
       )
       .subscribe();
 
+    // 2. Poll every 60 seconds
+    const intervalId = setInterval(() => {
+      fetchData();
+    }, 60000);
+
+    // 3. Refetch on Window Focus
+    const onFocus = () => {
+      fetchData();
+    };
+    window.addEventListener("focus", onFocus);
+
     return () => {
       supabase.removeChannel(channel);
+      clearInterval(intervalId);
+      window.removeEventListener("focus", onFocus);
     };
   }, [fetchData, pathname]);
 

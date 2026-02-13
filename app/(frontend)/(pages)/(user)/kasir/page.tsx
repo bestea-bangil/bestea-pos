@@ -221,6 +221,7 @@ function KasirContent() {
 
   // Transaction Context for Syncing
   const {
+    transactions: allTransactions,
     addExpense: addTransactionExpense,
     addTransaction: addTransactionToDB,
   } = useTransactions();
@@ -256,7 +257,7 @@ function KasirContent() {
   useEffect(() => {
     fetchData();
 
-    // Realtime subscription
+    // 1. Realtime subscription (Supabase)
     const channel = supabase
       .channel("kasir-product-updates")
       .on(
@@ -268,10 +269,31 @@ function KasirContent() {
       )
       .subscribe();
 
+    // 2. Poll every 60 seconds (Safety net)
+    const intervalId = setInterval(() => {
+      fetchData();
+    }, 60000);
+
+    // 3. Refetch on Window Focus (PWA resume)
+    const onFocus = () => {
+      fetchData();
+    };
+    window.addEventListener("focus", onFocus);
+
     return () => {
       supabase.removeChannel(channel);
+      clearInterval(intervalId);
+      window.removeEventListener("focus", onFocus);
     };
   }, [fetchData, pathname]);
+
+  // 4. Refetch when transactions change (Sales Update)
+  // We use a separate effect to avoid re-subscribing to channels
+  useEffect(() => {
+    if (allTransactions.length > 0) {
+      fetchData();
+    }
+  }, [allTransactions.length, fetchData]);
 
   const handleConfirmCashOut = (amount: number, description: string) => {
     // 1. Add to Shift Data (Local Cashier State)
@@ -538,8 +560,6 @@ function KasirContent() {
     currency: "IDR",
     minimumFractionDigits: 0,
   });
-
-  const { transactions: allTransactions } = useTransactions();
 
   const dailyTransactions = allTransactions.filter(
     (t) =>
