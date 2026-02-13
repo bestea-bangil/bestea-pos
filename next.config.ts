@@ -9,6 +9,19 @@ const withPWA = require("@ducanh2912/next-pwa").default({
   disable: process.env.NODE_ENV === "development",
   workboxOptions: {
     disableDevLogs: true,
+    // Exclude API routes from service worker caching
+    runtimeCaching: [
+      {
+        urlPattern: /^https?:\/\/.*\/api\/.*/i,
+        handler: "NetworkOnly",
+        method: "POST",
+      },
+      {
+        urlPattern: /^https?:\/\/.*\/api\/.*/i,
+        handler: "NetworkOnly",
+        method: "GET",
+      },
+    ],
   },
 });
 
