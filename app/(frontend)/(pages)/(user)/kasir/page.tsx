@@ -269,31 +269,10 @@ function KasirContent() {
       )
       .subscribe();
 
-    // 2. Poll every 60 seconds (Safety net)
-    const intervalId = setInterval(() => {
-      fetchData();
-    }, 60000);
-
-    // 3. Refetch on Window Focus (PWA resume)
-    const onFocus = () => {
-      fetchData();
-    };
-    window.addEventListener("focus", onFocus);
-
     return () => {
       supabase.removeChannel(channel);
-      clearInterval(intervalId);
-      window.removeEventListener("focus", onFocus);
     };
   }, [fetchData, pathname]);
-
-  // 4. Refetch when transactions change (Sales Update)
-  // We use a separate effect to avoid re-subscribing to channels
-  useEffect(() => {
-    if (allTransactions.length > 0) {
-      fetchData();
-    }
-  }, [allTransactions.length, fetchData]);
 
   const handleConfirmCashOut = (amount: number, description: string) => {
     // 1. Add to Shift Data (Local Cashier State)
