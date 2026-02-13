@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { supabase } from "@/lib/supabase/client";
 import { Switch } from "@/components/ui/switch";
 import {
   Plus,
@@ -124,6 +125,22 @@ export default function ProductPage() {
 
   useEffect(() => {
     fetchData();
+
+    // Realtime subscription
+    const channel = supabase
+      .channel("product-dashboard-changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "products" },
+        () => {
+          fetchData();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [fetchData, pathname]);
 
   // Filter Logic

@@ -66,6 +66,7 @@ import { PrinterSettingsModal } from "./components/printer-settings-modal";
 import { useBranch } from "@/contexts/branch-context";
 import { useRouter, usePathname } from "next/navigation";
 import { toast } from "sonner";
+import { supabase } from "@/lib/supabase/client";
 
 import {
   AlertDialog,
@@ -225,33 +226,52 @@ function KasirContent() {
   } = useTransactions();
 
   // Fetch Data
-  useEffect(() => {
-    const fetchData = async () => {
-      setIsDataLoading(true);
-      try {
-        const [prodRes, catRes] = await Promise.all([
-          fetch("/api/products", { cache: "no-store" }),
-          fetch("/api/categories", { cache: "no-store" }),
-        ]);
-        if (prodRes.ok) {
-          const pData = await prodRes.json();
-          if (Array.isArray(pData)) {
-            setProducts(pData.filter((p: Product) => p.status === "active"));
-          } else {
-            console.error("Invalid products data", pData);
-            setProducts([]);
-          }
+  const fetchData = useCallback(async () => {
+    // Only show loading on initial load if products are empty
+    if (products.length === 0) setIsDataLoading(true);
+
+    try {
+      const [prodRes, catRes] = await Promise.all([
+        fetch("/api/products", { cache: "no-store" }),
+        fetch("/api/categories", { cache: "no-store" }),
+      ]);
+      if (prodRes.ok) {
+        const pData = await prodRes.json();
+        if (Array.isArray(pData)) {
+          setProducts(pData.filter((p: Product) => p.status === "active"));
+        } else {
+          console.error("Invalid products data", pData);
+          setProducts([]);
         }
-        if (catRes.ok) setCategories(await catRes.json());
-      } catch (error) {
-        console.error("Failed to fetch products", error);
-        toast.error("Gagal memuat produk");
-      } finally {
-        setIsDataLoading(false);
       }
-    };
+      if (catRes.ok) setCategories(await catRes.json());
+    } catch (error) {
+      console.error("Failed to fetch products", error);
+      toast.error("Gagal memuat produk");
+    } finally {
+      setIsDataLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
     fetchData();
-  }, [pathname]);
+
+    // Realtime subscription
+    const channel = supabase
+      .channel("kasir-product-updates")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "products" },
+        () => {
+          fetchData();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchData, pathname]);
 
   const handleConfirmCashOut = (amount: number, description: string) => {
     // 1. Add to Shift Data (Local Cashier State)
