@@ -66,7 +66,6 @@ import { PrinterSettingsModal } from "./components/printer-settings-modal";
 import { useBranch } from "@/contexts/branch-context";
 import { useRouter, usePathname } from "next/navigation";
 import { toast } from "sonner";
-import { supabase } from "@/lib/supabase/client";
 
 import {
   AlertDialog,
@@ -256,23 +255,7 @@ function KasirContent() {
 
   useEffect(() => {
     fetchData();
-
-    // 1. Realtime subscription (Supabase)
-    const channel = supabase
-      .channel("kasir-product-updates")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "products" },
-        () => {
-          fetchData();
-        },
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [fetchData, pathname]);
+  }, [fetchData]);
 
   const handleConfirmCashOut = (amount: number, description: string) => {
     // 1. Add to Shift Data (Local Cashier State)
@@ -439,6 +422,10 @@ function KasirContent() {
           transactionData,
           transactionItems,
         );
+
+        if (!savedTransaction) {
+          throw new Error("Gagal menyimpan transaksi (API Error)");
+        }
       }
 
       if (savedTransaction) {
@@ -510,6 +497,8 @@ function KasirContent() {
           total: savedTransaction.totalAmount, // shiftTransaction uses 'total'
           cashierName: savedTransaction.cashierName,
           paymentMethod: savedTransaction.paymentMethod,
+          branchName:
+            savedTransaction.branchName || currentBranch?.name || "Bestea",
         };
 
         if (isConnected) {
@@ -525,6 +514,8 @@ function KasirContent() {
   const handleClosePaymentModal = () => {
     setIsPaymentModalOpen(false);
     setCartItems([]);
+    // Refresh products to show updated stock after transaction
+    fetchData();
   };
 
   const totalItems = cartItems.reduce((acc, item) => acc + item.quantity, 0);

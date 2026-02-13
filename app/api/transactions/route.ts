@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 
+
 // Initialize Supabase Client with Service Role Key for admin privileges (bypass RLS)
 // Fallback to Anon Key if Service Role not found (though Service Role is recommended for backend)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -80,9 +81,9 @@ export async function POST(request: Request) {
     );
 
     if (rpcError) {
-      console.error("RPC Error:", rpcError);
+      console.error("RPC Error Full Details:", JSON.stringify(rpcError, null, 2));
       return NextResponse.json(
-        { error: "Failed to process transaction", details: rpcError },
+        { error: "Failed to process transaction", details: rpcError, message: rpcError.message || rpcError.details },
         { status: 500 },
       );
     }
@@ -110,6 +111,8 @@ export async function POST(request: Request) {
       transactionCode: trxData.transactionCode,
       items: items || [],
     };
+
+
 
     return NextResponse.json(formattedTransaction, { status: 200 });
   } catch (error) {

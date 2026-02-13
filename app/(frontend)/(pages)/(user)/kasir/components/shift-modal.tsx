@@ -164,7 +164,8 @@ interface ShiftModalProps {
 
 export function ShiftModal({ isOpen, mode, onOpenChange }: ShiftModalProps) {
   const router = useRouter();
-  const { openShift, closeShift, shiftData } = useShift();
+  const { openShift, closeShift, shiftData, checkActiveSession, resumeShift } =
+    useShift();
   const { clockIn, clockOut, currentBranch, setActiveEmployee, logout } =
     useBranch();
   const [amount, setAmount] = useState("");
@@ -212,17 +213,39 @@ export function ShiftModal({ isOpen, mode, onOpenChange }: ShiftModalProps) {
     setAmount(formatted);
   };
 
-  const handlePinSuccess = (employee: {
+  const handlePinSuccess = async (employee: {
     id: string;
     name: string;
     role: string;
     branch: string;
+    branchId?: string;
   }) => {
     setPendingEmployee(employee);
     setShowPinModal(false);
-    setStep("amount");
-    // Set active employee
+
+    // Set active employee immediately so context is ready
     setActiveEmployee(employee);
+
+    if (mode === "open") {
+      // Check for existing open shift for this branch
+      const branchIdToCheck = currentBranch?.id || employee.branchId || "";
+      if (branchIdToCheck) {
+        toast.loading("Memeriksa sesi aktif...", { id: "check-session" });
+        const activeSession = await checkActiveSession(branchIdToCheck);
+        toast.dismiss("check-session");
+
+        if (activeSession) {
+          resumeShift(activeSession);
+          toast.success("Melanjutkan Sesi Shift", {
+            description: `Shift sebelumnya belum ditutup. Melanjutkan shift ${activeSession.opener?.name || ""}.`,
+          });
+          onOpenChange(false);
+          return;
+        }
+      }
+    }
+
+    setStep("amount");
   };
 
   const handleSubmit = async () => {

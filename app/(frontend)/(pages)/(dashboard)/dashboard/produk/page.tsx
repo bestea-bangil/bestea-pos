@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { supabase } from "@/lib/supabase/client";
+
 import { Switch } from "@/components/ui/switch";
 import {
   Plus,
@@ -126,22 +126,16 @@ export default function ProductPage() {
   useEffect(() => {
     fetchData();
 
-    // 1. Realtime subscription
-    const channel = supabase
-      .channel("product-dashboard-changes")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "products" },
-        () => {
-          fetchData();
-        },
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
+    // Refresh when tab becomes visible (cross-tab stock sync)
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        fetchData();
+      }
     };
-  }, [fetchData, pathname]);
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () =>
+      document.removeEventListener("visibilitychange", handleVisibility);
+  }, [fetchData]);
 
   // Filter Logic
   const filteredProducts = products.filter((prod) => {

@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 
+
 export const dynamic = 'force-dynamic';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -121,6 +122,8 @@ export async function PUT(request: Request) {
             await supabase.from("product_variants").insert(variantsData);
         }
 
+
+
         return NextResponse.json({ success: true });
     } catch (error) {
         return NextResponse.json({ error: "Failed to update product" }, { status: 500 });
@@ -136,6 +139,8 @@ export async function DELETE(request: Request) {
 
         const { error } = await supabase.from("products").delete().eq("id", id);
         if (error) throw error;
+
+
 
         return NextResponse.json({ success: true });
     } catch (error) {

@@ -1,4 +1,5 @@
--- Run this in your Supabase SQL Editor
+-- Fix for process_transaction function
+-- Addresses error: record "v_trx_record" is not assigned yet
 
 create or replace function process_transaction(
   p_transaction jsonb,

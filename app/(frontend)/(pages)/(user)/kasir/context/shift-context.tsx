@@ -65,6 +65,8 @@ interface ShiftContextType {
     employee?: ShiftEmployee,
   ) => void;
   isLoading: boolean;
+  checkActiveSession: (branchId: string) => Promise<any>;
+  resumeShift: (session: any) => void;
 }
 
 const ShiftContext = createContext<ShiftContextType | undefined>(undefined);
@@ -129,6 +131,58 @@ export function ShiftProvider({ children }: { children: ReactNode }) {
       JSON.stringify({ isShiftOpen, shiftData }),
     );
   }, [isShiftOpen, shiftData]);
+
+  const checkActiveSession = async (branchId: string) => {
+    try {
+      const res = await fetch(
+        `/api/shift-sessions?branchId=${branchId}&status=open`,
+        { cache: "no-store" },
+      );
+      if (res.ok) {
+        const data = await res.json();
+        // If data is returned (not null/empty), it means there is an open shift
+        if (data && data.id) return data;
+      }
+      return null;
+    } catch (error) {
+      console.error("Failed to check active session:", error);
+      return null;
+    }
+  };
+
+  const resumeShift = (session: any) => {
+    // Map API session to local ShiftData
+    // We might need to fetch transactions/expenses if we want full state restoration,
+    // but for now let's restore the basic session info.
+    // Ideally, we should fetch the transactions for this session too.
+
+    const restoredData: ShiftData = {
+      sessionId: session.id,
+      startTime: session.start_time,
+      endTime: null,
+      initialCash: session.initial_cash || 0,
+      totalCashTransactions: 0, // Should be calculated from fetched transactions
+      totalQrisTransactions: 0,
+      totalExpenses: 0,
+      expenses: [],
+      transactions: [],
+      expectedCash: session.initial_cash || 0, // Simplified for now
+      actualCash: null,
+      discrepancy: null,
+      notes: null,
+      branchName: shiftData.branchName, // Keep current branch name
+      openedBy: {
+        id: session.opener?.id,
+        name: session.opener?.name,
+        role: session.opener?.role,
+        branchId: session.branch_id,
+      },
+      closedBy: null,
+    };
+
+    setShiftData(restoredData);
+    setIsShiftOpen(true);
+  };
 
   const openShift = async (
     initialCash: number,
@@ -282,6 +336,8 @@ export function ShiftProvider({ children }: { children: ReactNode }) {
         addTransaction,
         addExpense,
         isLoading,
+        checkActiveSession,
+        resumeShift,
       }}
     >
       {children}

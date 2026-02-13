@@ -22,6 +22,7 @@ interface PinEntryModalProps {
     name: string;
     role: string;
     branch: string;
+    branchId?: string;
   }) => void;
   branchName: string;
   title?: string;
@@ -82,6 +83,7 @@ export function PinEntryModal({
           name: employee.name,
           role: employee.role,
           branch: employee.branch,
+          branchId: employee.branchId,
         });
       } else {
         setError("Password tidak valid atau karyawan tidak aktif");

@@ -215,7 +215,6 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
     const debouncedRefreshTransactions = () => {
       clearTimeout(transactionTimeout);
       transactionTimeout = setTimeout(() => {
-        console.log("Refreshing transactions due to realtime update...");
         fetchTransactions();
       }, 1000); // 1s delay to ensure all items are inserted
     };
@@ -283,6 +282,7 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
 
         if (!response.ok) {
           const errorData = await response.json();
+          console.error("Transaction API Failed Details:", errorData);
           throw new Error(errorData.error || "Failed to save transaction");
         }
 
@@ -293,6 +293,7 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
 
         return savedTransaction;
       } catch (error) {
+        console.error("Error adding transaction:", error);
         return null;
       }
     },

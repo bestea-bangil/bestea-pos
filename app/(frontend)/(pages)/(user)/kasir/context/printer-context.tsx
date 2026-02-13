@@ -245,7 +245,7 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
 
       // Branch Name
       encoder.bold(true);
-      encoder.line(transaction.branchName || "Bestea Bangil");
+      encoder.line(transaction.branchName || "Bestea");
       encoder.bold(false);
 
       // Address & Phone (From image/template)
