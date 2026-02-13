@@ -78,8 +78,7 @@ export async function GET(request: NextRequest) {
       const attendanceCount = empAttendance.length;
       
       const empSchedules = schedules?.filter((s: any) => s.employee_id === emp.id) || [];
-      const scheduledDaysOfWeek = empSchedules.map((s: any) => s.day_of_week);
-
+      
       let scheduledCount = 0;
       const daysInMonth = new Date(parseInt(yyyy), parseInt(mm), 0).getDate();
       
@@ -101,15 +100,35 @@ export async function GET(request: NextRequest) {
             const joinDateStr = joinDate.toISOString().split('T')[0];
             if (dateStr < joinDateStr) continue;
         }
+
         let dayOfWeek = date.getDay() - 1; 
         if (dayOfWeek === -1) dayOfWeek = 6; 
-        if (scheduledDaysOfWeek.includes(dayOfWeek)) {
+
+        // Calculate Monday date for this specific date to match week_start
+        const currentDay = date.getDay(); // 0 (Sun) - 6 (Sat)
+        const diffToMonday = currentDay === 0 ? -6 : 1 - currentDay;
+        const mondayDate = new Date(date);
+        mondayDate.setDate(date.getDate() + diffToMonday);
+        
+        // Format to YYYY-MM-DD
+        // Use local time for date string generation to match what's stored in DB (assuming DB stores YYYY-MM-DD string)
+        // We use the same method as in the frontend/shift page usually, but here simple ISO split is risky with timezones.
+        // However, mondayDate is created from 'date' which is created from (yyyy, mm-1, day).
+        // Let's use a safe formatter.
+        const offset = mondayDate.getTimezoneOffset();
+        const localMonday = new Date(mondayDate.getTime() - offset * 60 * 1000);
+        const weekStartStr = localMonday.toISOString().split('T')[0];
+
+        // Find specific schedule for this week and day
+        const hasSchedule = empSchedules.some((s: any) => 
+            s.week_start === weekStartStr && 
+            s.day_of_week === dayOfWeek &&
+            s.shift_type !== 'Libur'
+        );
+
+        if (hasSchedule) {
             scheduledCount++;
         }
-      }
-
-      if (scheduledDaysOfWeek.length === 0) {
-        scheduledCount = attendanceCount; 
       }
 
       let daysPresent = 0;
