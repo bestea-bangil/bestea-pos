@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { CalendarIcon, Download, Plus, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { AddExpenseModal } from "./components/add-expense-modal";
 import { ReportSummary } from "./components/report-summary";
 import { ExpensesTable } from "./components/expenses-table";
@@ -82,11 +83,12 @@ export default function LaporanPage() {
 
       if (!res.ok) throw new Error("Failed to add expense");
 
+      toast.success("Pengeluaran berhasil disimpan");
       // Refresh data
       fetchReports();
     } catch (error) {
       console.error("Error adding expense:", error);
-      alert("Gagal menyimpan pengeluaran");
+      toast.error("Gagal menyimpan pengeluaran");
     }
   };
 
