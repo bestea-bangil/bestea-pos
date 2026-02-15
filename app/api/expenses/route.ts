@@ -35,7 +35,7 @@ export async function POST(request: Request) {
           branch_id: branchId,
           recorded_by: recordedBy,
           recorded_by_name: recordedByName,
-          date: date || new Date().toISOString(),
+          created_at: date || new Date().toISOString(), // Use created_at instead of date
           shift_session_id: shiftSessionId,
         },
       ])
