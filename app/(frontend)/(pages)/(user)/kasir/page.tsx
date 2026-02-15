@@ -36,6 +36,7 @@ interface Category {
 
 import { CategorySelector } from "./components/category-selector";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
+import { SyncStatus } from "@/components/sync-status";
 import { ProductGrid } from "./components/product-grid";
 import { CartSection } from "./components/cart-section";
 import {
@@ -667,6 +668,7 @@ function KasirContent() {
               </div>
 
               <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                <SyncStatus />
                 <InstallPrompt />
                 <ConnectPrinterButton />
 
