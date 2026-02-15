@@ -414,7 +414,11 @@ export function ShiftProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (lastSynced && isShiftOpen) {
-      refreshShiftData();
+      // Small delay to ensure server processing is complete and race conditions
+      setTimeout(() => {
+        refreshShiftData();
+        // toast.info("Memperbarui data shift..."); // Optional feedback
+      }, 1000);
     }
   }, [lastSynced, isShiftOpen]);
 

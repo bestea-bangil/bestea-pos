@@ -84,8 +84,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           const payload = {
             transaction: {
               ...txData,
-              // Ensure required fields for API are present (e.g. status)
-              status: txData.status || "completed",
+              // Force status to completed during sync (offline transactions are technically completed locally)
+              status: "completed",
             },
             items: items || [],
           };
@@ -133,28 +133,19 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       for (const exp of expenses) {
         try {
           const { offline, id, timestamp, branchName, ...expData } = exp;
-          // API expects snake_case for Supabase usually, but checking TransactionContext it sends camelCase to API?
-          // Wait, TransactionContext sends: branch_id, category, etc... directly to Supabase via client!
-          // BUT offline sync must go through API route because we don't expose Supabase key here nicely or simple reuse logic.
-          // Let's assume there is /api/expenses endpoint. If not, I might need to create it or use supabase client here?
-          // Actually, `SyncContext` uses `fetch`. So I should use `fetch("/api/expenses")`.
-          // Does `/api/expenses` exist? I haven't checked.
-          // If it doesn't exist, I should fallback to supabase client logic or create the endpoint.
-          // The existing `TransactionContext` uses `supabase.from('expenses').insert`.
-          // Let's assume for now I will use the same pattern as transactions: sending JSON to an API.
-          // I'll check if `/api/expenses` exists later or assumes it does.
-          // Actually, to be safe, I'll assume I need to handle it.
 
-          // NOTE: TransactionContext uses direct supabase client.
-          // SyncContext uses fetch /api/... which implies I should likely use API routes for consistency/security in sync.
-          // But if /api/expenses doesn't exist, this will fail.
-          // I will assume it exists or I will create it.
-          // Better: I'll use the API route since I can't easily import the context's addExpense here.
+          // Fix Payload for API
+          // API expects 'recordedBy' to be the UUID (employeeId)
+          const payload = {
+            ...expData,
+            recordedBy: expData.employeeId, // Send UUID
+            amount: Number(expData.amount), // Ensure number
+          };
 
           const response = await fetch("/api/expenses", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(expData),
+            body: JSON.stringify(payload),
           });
 
           if (!response.ok) throw new Error("Failed to sync expense");
