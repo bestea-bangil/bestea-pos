@@ -230,89 +230,144 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
   const login = React.useCallback(
     async (email: string, pass: string) => {
       try {
-        const response = await fetch("/api/auth/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password: pass }),
-        });
+        // 1. Try Online Login
+        if (navigator.onLine) {
+          const response = await fetch("/api/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password: pass }),
+          });
 
-        const result = await response.json();
+          const result = await response.json();
 
-        if (!response.ok) {
-          return { success: false, error: result.error || "Gagal login" };
-        }
+          if (!response.ok) {
+            return { success: false, error: result.error || "Gagal login" };
+          }
 
-        const { role, employee, branches: employeeBranches } = result;
+          const { role, employee, branches: employeeBranches } = result;
 
-        // Logic to determine branch
-        let branch: Branch | null = null;
+          // Logic to determine branch
+          let branch: Branch | null = null;
 
-        if (role === "super_admin") {
-          // For super_admin, try to use assigned branch or fallback to first available
-          const branchData = employeeBranches as DBBranch | null;
-          branch = branchData
-            ? {
-                id: branchData.id,
-                name: branchData.name,
-                type: branchData.type as BranchType,
-                email: branchData.email,
-                address: branchData.address,
-                phone: branchData.phone,
-              }
-            : branches.find((b) => b.type === "admin") || branches[0];
-        } else {
-          // For others, use assigned branch or find by ID
-          const branchData = employeeBranches as DBBranch | null;
-          branch = branchData
-            ? {
-                id: branchData.id,
-                name: branchData.name,
-                type: branchData.type as BranchType,
-                email: branchData.email,
-                address: branchData.address,
-                phone: branchData.phone,
-              }
-            : branches.find((b) => b.id === employee.branch_id) || null;
-        }
+          if (role === "super_admin") {
+            const branchData = employeeBranches as DBBranch | null;
+            branch = branchData
+              ? {
+                  id: branchData.id,
+                  name: branchData.name,
+                  type: branchData.type as BranchType,
+                  email: branchData.email,
+                  address: branchData.address,
+                  phone: branchData.phone,
+                }
+              : branches.find((b) => b.type === "admin") || branches[0];
+          } else {
+            const branchData = employeeBranches as DBBranch | null;
+            branch = branchData
+              ? {
+                  id: branchData.id,
+                  name: branchData.name,
+                  type: branchData.type as BranchType,
+                  email: branchData.email,
+                  address: branchData.address,
+                  phone: branchData.phone,
+                }
+              : branches.find((b) => b.id === employee.branch_id) || null;
+          }
 
-        if (branch) {
-          setUserRole(role as RoleType);
-          setCurrentBranch(branch);
+          if (branch) {
+            setUserRole(role as RoleType);
+            setCurrentBranch(branch);
 
-          const empData = {
-            id: employee.id,
-            name: employee.name,
-            role: employee.role,
-            branch: branch.name,
-            branchId: branch.id,
-            email: employee.email,
-            avatar_url: employee.avatar_url,
-          };
-          setActiveEmployee(empData);
-
-          localStorage.setItem(
-            "bestea-active-employee",
-            JSON.stringify(empData),
-          );
-
-          // Save session for AuthGuard
-          localStorage.setItem(
-            AUTH_KEY,
-            JSON.stringify({
-              role,
+            const empData = {
+              id: employee.id,
+              name: employee.name,
+              role: employee.role,
+              branch: branch.name,
               branchId: branch.id,
-              employeeId: employee.id,
-            }),
-          );
+              email: employee.email,
+              avatar_url: employee.avatar_url,
+            };
+            setActiveEmployee(empData);
 
-          return {
-            success: true,
-            role: role as RoleType,
-            branch: branch,
-            employee: empData,
-          };
+            localStorage.setItem(
+              "bestea-active-employee",
+              JSON.stringify(empData),
+            );
+
+            // Save session for AuthGuard
+            localStorage.setItem(
+              AUTH_KEY,
+              JSON.stringify({
+                role,
+                branchId: branch.id,
+                employeeId: employee.id,
+              }),
+            );
+
+            // CACHE CREDENTIALS FOR OFFLINE LOGIN
+            // Warning: Simple obfuscation only. In production, use better secure storage or only token.
+            // But since this is a requirement for offline login *without* internet:
+            const offlineData = {
+              email,
+              password: btoa(pass), // Simple Base64 to avoid plain text staring at you
+              role: role,
+              branch: branch,
+              employee: empData,
+            };
+            localStorage.setItem(
+              "bestea-offline-auth",
+              JSON.stringify(offlineData),
+            );
+
+            return {
+              success: true,
+              role: role as RoleType,
+              branch: branch,
+              employee: empData,
+            };
+          } else {
+            return { success: false, error: "Cabang karyawan tidak ditemukan" };
+          }
         } else {
-          return { success: false, error: "Cabang karyawan tidak ditemukan" };
+          // 2. Offline Fallback
+          toast.warning("Mode Offline: Mencoba login lokal...");
+          const cachedAuth = localStorage.getItem("bestea-offline-auth");
+
+          if (cachedAuth) {
+            const data = JSON.parse(cachedAuth);
+            if (data.email === email && atob(data.password) === pass) {
+              setUserRole(data.role as RoleType);
+              setCurrentBranch(data.branch);
+              setActiveEmployee(data.employee);
+
+              localStorage.setItem(
+                "bestea-active-employee",
+                JSON.stringify(data.employee),
+              );
+              localStorage.setItem(
+                AUTH_KEY,
+                JSON.stringify({
+                  role: data.role,
+                  branchId: data.branch.id,
+                  employeeId: data.employee.id,
+                }),
+              );
+
+              toast.success("Login Offline Berhasil");
+              return {
+                success: true,
+                role: data.role as RoleType,
+                branch: data.branch,
+                employee: data.employee,
+              };
+            }
+          }
+          return {
+            success: false,
+            error:
+              "Gagal login offline. Pastikan pernah login online sebelumnya.",
+          };
         }
       } catch (error) {
         console.error("[Login] Error:", error);

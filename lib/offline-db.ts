@@ -72,6 +72,8 @@ export const getProductsCache = async () => {
   return db.getAll('products');
 };
 
+
+
 export const saveOfflineAttendance = async (attendance: any) => {
   const db = await initDB();
   // Ensure attendance has an ID

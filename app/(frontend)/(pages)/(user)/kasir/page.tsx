@@ -232,14 +232,23 @@ function KasirContent() {
     if (products.length === 0) setIsDataLoading(true);
 
     try {
+      // 1. Try Network First
       const [prodRes, catRes] = await Promise.all([
         fetch("/api/products", { cache: "no-store" }),
         fetch("/api/categories", { cache: "no-store" }),
       ]);
+
       if (prodRes.ok) {
         const pData = await prodRes.json();
         if (Array.isArray(pData)) {
-          setProducts(pData.filter((p: Product) => p.status === "active"));
+          const activeProducts = pData.filter(
+            (p: Product) => p.status === "active",
+          );
+          setProducts(activeProducts);
+
+          // Cache logic (Dynamic Import)
+          const { saveProductsCache } = await import("@/lib/offline-db");
+          saveProductsCache(activeProducts);
         } else {
           console.error("Invalid products data", pData);
           setProducts([]);
@@ -247,8 +256,25 @@ function KasirContent() {
       }
       if (catRes.ok) setCategories(await catRes.json());
     } catch (error) {
-      console.error("Failed to fetch products", error);
-      toast.error("Gagal memuat produk");
+      console.error("Failed to fetch data (Offline fallback?):", error);
+
+      // 2. Offline Fallback
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        try {
+          const { getProductsCache } = await import("@/lib/offline-db");
+          const cachedProducts = await getProductsCache();
+          if (cachedProducts && cachedProducts.length > 0) {
+            setProducts(cachedProducts);
+            toast.info("Mode Offline: Menggunakan data produk lokal.");
+
+            // Mock Categories if needed or cache them too (skipping categories cache for now to keep it simple)
+          }
+        } catch (cacheErr) {
+          console.error("Cache load failed", cacheErr);
+        }
+      } else {
+        toast.error("Gagal memuat produk (Koneksi Bermasalah)");
+      }
     } finally {
       setIsDataLoading(false);
     }
