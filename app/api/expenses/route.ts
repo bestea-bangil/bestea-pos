@@ -17,11 +17,12 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { category, amount, description, branchId, recordedBy, date, shiftSessionId } = body;
+    const { category, amount, description, branchId, recordedBy, recordedByName, date, shiftSessionId } = body;
 
     // Validate
     if (!category || !amount || !branchId) {
-       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+       console.error("Expense Sync Missing Fields:", { category, amount, branchId });
+       return NextResponse.json({ error: "Missing required fields (category, amount, branchId)" }, { status: 400 });
     }
 
     const { data, error } = await supabase
@@ -33,6 +34,7 @@ export async function POST(request: Request) {
           description,
           branch_id: branchId,
           recorded_by: recordedBy,
+          recorded_by_name: recordedByName,
           date: date || new Date().toISOString(),
           shift_session_id: shiftSessionId,
         },
@@ -40,11 +42,14 @@ export async function POST(request: Request) {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+       console.error("Supabase Expense Insert Error:", error);
+       throw error;
+    }
 
     return NextResponse.json(data);
-  } catch (error) {
-    return NextResponse.json({ error: "Failed to create expense" }, { status: 500 });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || "Failed to create expense", details: error }, { status: 500 });
   }
 }
 

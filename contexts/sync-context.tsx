@@ -139,6 +139,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           const payload = {
             ...expData,
             recordedBy: expData.employeeId, // Send UUID
+            recordedByName: expData.recordedBy, // Send Name
             amount: Number(expData.amount), // Ensure number
           };
 
@@ -148,11 +149,17 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             body: JSON.stringify(payload),
           });
 
-          if (!response.ok) throw new Error("Failed to sync expense");
+          if (!response.ok) {
+            const errData = await response.json();
+            throw new Error(
+              errData.error || errData.message || "Failed to sync expense",
+            );
+          }
           await deleteExpense(id);
           syncedCount++;
-        } catch (err) {
+        } catch (err: any) {
           console.error("Failed to sync expense", exp, err);
+          toast.error(`Gagal sync pengeluaran: ${err.message}`);
           errorCount++;
         }
       }
