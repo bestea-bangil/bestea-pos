@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Eye, EyeOff, Loader2, User, KeyRound } from "lucide-react";
 import Image from "next/image";
+import { InstallPrompt } from "@/components/pwa/install-prompt";
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -155,6 +156,10 @@ export default function LoginPage() {
             Hubungi Administrator
           </a>
         </div>
+      </div>
+
+      <div className="flex justify-center mt-8">
+        <InstallPrompt />
       </div>
 
       <p className="text-center text-xs text-slate-400 mt-6">

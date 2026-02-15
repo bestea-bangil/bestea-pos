@@ -35,6 +35,7 @@ interface Category {
 }
 
 import { CategorySelector } from "./components/category-selector";
+import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { ProductGrid } from "./components/product-grid";
 import { CartSection } from "./components/cart-section";
 import {
@@ -616,6 +617,7 @@ function KasirContent() {
               </div>
 
               <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                <InstallPrompt />
                 <ConnectPrinterButton />
 
                 <div className="h-8 w-px bg-slate-200 mx-1 hidden sm:block" />
