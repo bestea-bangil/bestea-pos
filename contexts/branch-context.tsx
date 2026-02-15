@@ -6,6 +6,7 @@ import type {
   Branch as DBBranch,
   Employee as DBEmployee,
 } from "@/lib/supabase/types";
+import { toast } from "sonner";
 
 // Types
 export type BranchType = "admin" | "cabang";
@@ -154,9 +155,7 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
       setBranches(formattedBranches);
       return formattedBranches;
     } catch (error) {
-      console.error("Error fetching branches (offline?):", error);
-      // If we have cached branches in PWA/Server Worker, they would be returned by fetch.
-      // If fetch failed completely (NetworkError and no cache), we stay with empty branches or existing state.
+      console.error("Error fetching branches:", error);
       return [];
     }
   }, []);
@@ -350,6 +349,26 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
       status: string = "Hadir",
     ) => {
       try {
+        // Offline Handling
+        if (typeof navigator !== "undefined" && !navigator.onLine) {
+          const offlineData = {
+            action: "clock_in",
+            employeeId,
+            branchId,
+            shift,
+            status,
+            date: new Date().toISOString(),
+          };
+
+          const { saveOfflineAttendance } = await import("@/lib/offline-db");
+          await saveOfflineAttendance(offlineData);
+
+          toast.warning("Mode Offline: Absensi Masuk disimpan lokal.", {
+            description: "Akan disinkronisasi saat online.",
+          });
+          return { success: true, offline: true };
+        }
+
         const res = await fetch("/api/attendance", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -373,6 +392,24 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
   const clockOut = React.useCallback(
     async (employeeId: string, status?: string) => {
       try {
+        // Offline Handling
+        if (typeof navigator !== "undefined" && !navigator.onLine) {
+          const offlineData = {
+            action: "clock_out",
+            employeeId,
+            status,
+            date: new Date().toISOString(),
+          };
+
+          const { saveOfflineAttendance } = await import("@/lib/offline-db");
+          await saveOfflineAttendance(offlineData);
+
+          toast.warning("Mode Offline: Absensi Pulang disimpan lokal.", {
+            description: "Akan disinkronisasi saat online.",
+          });
+          return { success: true, offline: true };
+        }
+
         const res = await fetch("/api/attendance", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -397,7 +434,6 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
       if (res.ok) {
         const data: Employee[] = await res.json();
         setEmployees(data);
-        localStorage.setItem("bestea-employees-cache", JSON.stringify(data));
 
         // Sync activeEmployee with latest data from DB
         const storedEmp = localStorage.getItem("bestea-active-employee");
@@ -405,19 +441,31 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
           const parsed = JSON.parse(storedEmp);
           const latest = data.find((e) => e.id === parsed.id);
           if (latest) {
-            // ...
+            const updated = {
+              ...parsed,
+              name: latest.name,
+              email: latest.email,
+              avatar_url: latest.avatar_url,
+              role: latest.role,
+              branch: latest.branch,
+            };
+
+            // Compare to see if we need to update
+            if (JSON.stringify(updated) !== storedEmp) {
+              setActiveEmployee(updated);
+              localStorage.setItem(
+                "bestea-active-employee",
+                JSON.stringify(updated),
+              );
+            } else if (!activeEmployee) {
+              // If state is null but localStorage has it (e.g. first load)
+              setActiveEmployee(updated);
+            }
           }
         }
       }
     } catch (e) {
-      console.error("Failed to fetch employees (offline?)", e);
-      // Try load from cache
-      const cached = localStorage.getItem("bestea-employees-cache");
-      if (cached) {
-        try {
-          setEmployees(JSON.parse(cached));
-        } catch (err) {}
-      }
+      console.error("Failed to fetch employees", e);
     }
   }, [activeEmployee]);
 
@@ -438,25 +486,10 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
           const employee = await res.json();
           return employee;
         }
-        throw new Error("API Failed");
+        return null;
       } catch (e) {
-        console.error("Verify Password error / Offline", e);
-        // Fallback to local check
-        const cached = localStorage.getItem("bestea-employees-cache");
-        if (cached) {
-          try {
-            const employees: Employee[] = JSON.parse(cached);
-            // NOTE: This assumes 'pin' is present in the employee object.
-            // If API removes it for security, this won't work and we'd need to change API
-            // to return a hash or something, but for POS often it's sent.
-            // Let's check matching pin.
-            // Security Warning: Storing plain PINs in localStorage is risky.
-            // But user requested functionality.
-            const found = employees.find((e) => e.pin === password);
-            if (found) return found;
-          } catch (err) {}
-        }
-        return null; // Return null if both fail
+        console.error("Verify Password error", e);
+        return null;
       }
     },
     [],

@@ -127,9 +127,9 @@ export function PinEntryModal({
               onKeyDown={handleKeyDown}
               placeholder="Masukkan Password"
               className="h-12 text-center"
+              autoFocus
               inputMode="numeric"
               pattern="[0-9]*"
-              autoFocus
             />
           </div>
 

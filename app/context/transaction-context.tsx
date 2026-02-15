@@ -92,9 +92,6 @@ interface TransactionContextType {
     productsSold: number;
     productGrowth: number;
   };
-  isSyncing: boolean;
-  unsyncedCount: number;
-  syncTransactions: () => Promise<void>;
 }
 
 const TransactionContext = createContext<TransactionContextType | undefined>(
@@ -247,120 +244,47 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
     };
   }, [fetchTransactions, fetchExpenses]);
 
-  // Offline Queue State
-  const [pendingTransactions, setPendingTransactions] = useState<
-    {
-      trxData: Omit<Transaction, "id" | "date">;
-      items: TransactionItem[];
-      tempId: string;
-      timestamp: number;
-    }[]
-  >([]);
-  const [isSyncing, setIsSyncing] = useState(false);
-
-  // Load pending transactions on mount
-  useEffect(() => {
-    const stored = localStorage.getItem("bestea-pending-transactions");
-    if (stored) {
-      try {
-        setPendingTransactions(JSON.parse(stored));
-      } catch (e) {
-        console.error("Failed to parse pending transactions", e);
-      }
-    }
-  }, []);
-
-  // Sync to localStorage whenever pending changes
-  useEffect(() => {
-    localStorage.setItem(
-      "bestea-pending-transactions",
-      JSON.stringify(pendingTransactions),
-    );
-  }, [pendingTransactions]);
-
-  const syncTransactions = useCallback(async () => {
-    if (pendingTransactions.length === 0 || isSyncing) return;
-
-    setIsSyncing(true);
-    const failed: typeof pendingTransactions = [];
-    let successCount = 0;
-
-    // Process one by one to ensure order (though simple queue is fine)
-    // We clone the array to iterate
-    const queue = [...pendingTransactions];
-
-    for (const item of queue) {
-      try {
-        const response = await fetch("/api/transactions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            transaction: {
-              branchId: item.trxData.branchId,
-              cashierId: item.trxData.cashierId,
-              cashierName: item.trxData.cashierName,
-              customerName: item.trxData.customerName,
-              totalAmount: item.trxData.totalAmount,
-              paymentMethod: item.trxData.paymentMethod,
-              amountPaid: item.trxData.amountPaid,
-              changeAmount: item.trxData.changeAmount,
-              status: item.trxData.status || "completed",
-              shiftSessionId: item.trxData.shiftSessionId,
-              created_at: new Date(item.timestamp).toISOString(), // Use original timestamp
-            },
-            items: item.items.map((i) => ({
-              productId: i.productId,
-              productName: i.productName,
-              variant: i.variant,
-              quantity: i.quantity,
-              price: i.price,
-              subtotal: i.subtotal,
-            })),
-          }),
-        });
-
-        if (!response.ok) {
-          // If 4xx error (bad data), maybe we shouldn't retry?
-          // But for now, assume mostly network/server 5xx errors or offline.
-          // If it's a permanent error, we might get stuck.
-          // Let's retry everything for now.
-          throw new Error("Failed to sync");
-        }
-        successCount++;
-      } catch (e) {
-        console.error("Sync failed for item", item.tempId, e);
-        failed.push(item);
-      }
-    }
-
-    setPendingTransactions(failed);
-    setIsSyncing(false);
-
-    if (successCount > 0) {
-      // Refresh live data
-      fetchTransactions();
-    }
-  }, [pendingTransactions, isSyncing, fetchTransactions]);
-
-  // Auto-sync when online
-  useEffect(() => {
-    const handleOnline = () => {
-      console.log("Online! Syncing...");
-      syncTransactions();
-    };
-    window.addEventListener("online", handleOnline);
-    return () => window.removeEventListener("online", handleOnline);
-  }, [syncTransactions]);
-
   const addTransaction = useCallback(
     async (
       trxData: Omit<Transaction, "id" | "date">,
       items: TransactionItem[],
     ) => {
       try {
-        // Call Backend API
+        // Offline Handling
+        if (typeof navigator !== "undefined" && !navigator.onLine) {
+          const offlineId = `offline-${Date.now()}`;
+          const now = new Date().toISOString();
+
+          // Construct offline transaction object
+          const offlineTransaction: Transaction = {
+            id: offlineId,
+            date: now,
+            branchId: trxData.branchId,
+            branchName: trxData.branchName,
+            cashierId: trxData.cashierId,
+            cashierName: trxData.cashierName,
+            customerName: trxData.customerName,
+            totalAmount: trxData.totalAmount,
+            paymentMethod: trxData.paymentMethod,
+            amountPaid: trxData.amountPaid,
+            changeAmount: trxData.changeAmount,
+            status: "pending", // Mark as pending sync
+            shiftSessionId: trxData.shiftSessionId,
+            transactionCode: `OFF-${Math.floor(Math.random() * 1000)}`,
+            items: items,
+          };
+
+          // Save to IndexedDB
+          const { saveOfflineTransaction } = await import("@/lib/offline-db");
+          await saveOfflineTransaction(offlineTransaction);
+
+          // Optimistic UI Update
+          setTransactions((prev) => [offlineTransaction, ...prev]);
+
+          return offlineTransaction;
+        }
+
+        // Online: Call Backend API
         const response = await fetch("/api/transactions", {
           method: "POST",
           headers: {
@@ -391,38 +315,23 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
         });
 
         if (!response.ok) {
-          throw new Error("Failed to save transaction"); // Throw to trigger catch block
+          const errorData = await response.json();
+          console.error("Transaction API Failed Details:", errorData);
+          throw new Error(errorData.error || "Failed to save transaction");
         }
 
         const savedTransaction = await response.json();
+
+        // Optimistic update or wait for realtime (realtime subscription handles this usually)
+        // fetchTransactions();
+
         return savedTransaction;
       } catch (error) {
-        console.error("Error adding transaction (Offline/Network):", error);
-
-        // Queue functionality
-        const tempId = `offline_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        const newItem = {
-          trxData,
-          items,
-          tempId,
-          timestamp: Date.now(),
-        };
-
-        setPendingTransactions((prev) => [...prev, newItem]);
-
-        // Try to trigger sync immediately in case it was a blip, but async
-        // setTimeout(() => syncTransactions(), 1000);
-
-        // Return a fake transaction object so UI continues
-        return {
-          id: tempId,
-          date: new Date().toISOString(),
-          ...trxData,
-          items,
-        } as Transaction;
+        console.error("Error adding transaction:", error);
+        return null;
       }
     },
-    [], // syncTransactions dependency omitted to avoid cycle, strictly add logic
+    [],
   );
 
   const voidTransaction = useCallback(
@@ -648,9 +557,6 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
         getTopProducts,
         getBranchPerformance,
         getDailyStats,
-        isSyncing,
-        unsyncedCount: pendingTransactions.length,
-        syncTransactions,
       }}
     >
       {children}

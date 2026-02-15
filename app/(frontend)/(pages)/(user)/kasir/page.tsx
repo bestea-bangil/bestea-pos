@@ -172,58 +172,6 @@ function ConnectPrinterButton() {
   );
 }
 
-function SyncIndicator() {
-  const { unsyncedCount, isSyncing, syncTransactions } = useTransactions();
-  const [isOnline, setIsOnline] = useState(true);
-
-  useEffect(() => {
-    setIsOnline(navigator.onLine);
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
-    };
-  }, []);
-
-  if (unsyncedCount === 0 && isOnline) return null;
-
-  return (
-    <div
-      className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border ${
-        !isOnline
-          ? "bg-red-50 text-red-700 border-red-200"
-          : "bg-amber-50 text-amber-700 border-amber-200"
-      }`}
-    >
-      {!isOnline ? (
-        <>
-          <div className="w-2 h-2 rounded-full bg-red-500" />
-          <span>Offline</span>
-        </>
-      ) : isSyncing ? (
-        <>
-          <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-          <span>Sinkronisasi...</span>
-        </>
-      ) : (
-        <>
-          <div className="w-2 h-2 rounded-full bg-amber-500" />
-          <span>{unsyncedCount} Antrean</span>
-          <button
-            onClick={() => syncTransactions()}
-            className="underline ml-1 hover:text-amber-900"
-          >
-            Sync
-          </button>
-        </>
-      )}
-    </div>
-  );
-}
-
 function KasirContent() {
   const router = useRouter();
   const pathname = usePathname();
@@ -666,9 +614,6 @@ function KasirContent() {
                   Pilih kategori dan produk untuk dipesan.
                 </p>
               </div>
-
-              {/* Offline/Sync Indicator */}
-              <SyncIndicator />
 
               <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
                 <ConnectPrinterButton />

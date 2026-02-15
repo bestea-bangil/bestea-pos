@@ -193,6 +193,7 @@ export function PaymentModal({
                   id="amountPaid"
                   type="text"
                   inputMode="numeric"
+                  pattern="[0-9]*"
                   placeholder="0"
                   className="pl-10 h-12 text-lg font-bold border-2 focus-visible:ring-slate-900"
                   value={amountPaid}

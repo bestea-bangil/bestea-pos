@@ -35,6 +35,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { BranchProvider } from "@/contexts/branch-context";
 import { TransactionProvider } from "./context/transaction-context";
 
+import { SyncProvider } from "@/contexts/sync-context";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -63,12 +65,14 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <BranchProvider>
-          <TransactionProvider>
-            {children}
-            <Toaster />
-          </TransactionProvider>
-        </BranchProvider>
+        <SyncProvider>
+          <BranchProvider>
+            <TransactionProvider>
+              {children}
+              <Toaster />
+            </TransactionProvider>
+          </BranchProvider>
+        </SyncProvider>
       </body>
     </html>
   );
