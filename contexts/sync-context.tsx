@@ -77,6 +77,12 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       const transactions = await getPendingTransactions();
       for (const tx of transactions) {
         try {
+          if (!tx || !tx.id || !tx.totalAmount) {
+            console.warn("Skipping invalid transaction:", tx);
+            if (tx && tx.id) await deleteTransaction(tx.id); // Delete if ID exists but data invalid
+            continue;
+          }
+
           const { offline, id, timestamp, items, ...txData } = tx;
 
           // API expects { transaction: {...}, items: [...] }
@@ -95,11 +101,22 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
           });
-          if (!response.ok) throw new Error("Failed to sync transaction");
+
+          if (!response.ok) {
+            const resJson = await response.json();
+            throw new Error(
+              resJson.error || resJson.message || "Failed to sync transaction",
+            );
+          }
+
           await deleteTransaction(id);
           syncedCount++;
-        } catch (err) {
+        } catch (err: any) {
           console.error("Failed to sync transaction", tx, err);
+          // Only toast if it's a real error, not just a skip
+          if (err.message !== "Failed to sync transaction") {
+            toast.error(`Gagal sync transaksi: ${err.message}`);
+          }
           errorCount++;
         }
       }

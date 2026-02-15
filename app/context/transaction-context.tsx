@@ -271,6 +271,36 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
           const offlineId = `offline-${Date.now()}`;
           const now = new Date().toISOString();
 
+          // Generate Sequential Offline Code
+          let newCode = "#001";
+          const today = new Date();
+
+          // Find latest code from today's transactions (including optimistic ones)
+          // We can use the 'transactions' from the outer scope if we add it to dependencies
+          // OR, safer: use a functional update pattern, but we need the code *before* setting state to return it.
+          // Since we added 'transactions' to dependencies, we can use it here.
+
+          const latestTodayTrx = transactions.find((t) => {
+            const tDate = new Date(t.date);
+            // Check if same day (local time)
+            return (
+              tDate.getDate() === today.getDate() &&
+              tDate.getMonth() === today.getMonth() &&
+              tDate.getFullYear() === today.getFullYear() &&
+              t.transactionCode?.startsWith("#")
+            );
+          });
+
+          if (latestTodayTrx && latestTodayTrx.transactionCode) {
+            const lastNum = parseInt(
+              latestTodayTrx.transactionCode.replace("#", ""),
+              10,
+            );
+            if (!isNaN(lastNum)) {
+              newCode = `#${String(lastNum + 1).padStart(3, "0")}`;
+            }
+          }
+
           // Construct offline transaction object
           const offlineTransaction: Transaction = {
             id: offlineId,
@@ -286,7 +316,7 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
             changeAmount: trxData.changeAmount,
             status: "pending", // Mark as pending sync
             shiftSessionId: trxData.shiftSessionId,
-            transactionCode: `OFF-${Math.floor(Math.random() * 1000)}`,
+            transactionCode: newCode,
             items: items,
           };
 
@@ -347,7 +377,7 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
         return null;
       }
     },
-    [],
+    [transactions],
   );
 
   const voidTransaction = useCallback(

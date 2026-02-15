@@ -375,6 +375,35 @@ Di akhir jam kerja:
 
 ---
 
+### 4.8 Mode Offline & Sinkronisasi
+
+Aplikasi ini mendukung **Mode Lokal** (Offline) penuh.
+
+- **Tanpa Internet?** Tetap bisa jualan. Status di pojok kanan atas akan berubah menjadi **"Mode Lokal"**.
+- **Data Tersimpan**: Transaksi disimpan di browser (IndexedDB).
+- **Nomor Antrian**: Tetap berurut (misal: `#005`, `#006`) meskipun offline.
+- **Sinkronisasi**: Saat internet kembali nyala:
+  1. Status berubah hijau **"Online"**
+  2. Klik tombol **Sync** (jika ada data tertunda)
+  3. Data upload otomatis ke server & stok terupdate
+
+> **PENTING**: Jangan hapus cache browser saat masih ada transaksi yang belum di-sync.
+
+#### ⚠️ Alur Kerja (SOP) Mode Offline
+
+Agar data aman dan tidak hilang, ikuti urutan berikut:
+
+1.  **Login & Buka Shift** (Wajib 🟢 **Online**)
+    - Pastikan internet nyala saat awal membuka toko.
+2.  **Jualan / Transaksi** (Bebas ⚫ **Offline** / 🟢 **Online**)
+    - Jika internet mati di tengah jalan, lanjut saja transaksi.
+3.  **Sync Data** (Wajib 🟢 **Online**)
+    - Sebelum pulang, nyalakan internet dan pastikan semua data ter-upload (Status hijau).
+4.  **Tutup Shift** (Wajib 🟢 **Online**)
+    - Baru boleh tutup shift dan logout setelah sync selesai.
+
+---
+
 ## 5. Pengaturan Akun
 
 ### Profil
@@ -390,6 +419,10 @@ Di akhir jam kerja:
 ---
 
 ## Tips & FAQ
+
+### ❓ Bagaimana jika internet mati saat transaksi?
+
+Tenang, lanjutkan saja. Aplikasi otomatis masuk **Mode Lokal**. Transaksi akan disimpan di perangkat dan bisa di-upload (Sync) nanti saat online. Nomor struk tetap berurutan.
 
 ### ❓ Stok tidak berkurang setelah transaksi?
 
@@ -407,7 +440,7 @@ Tombol aktif hanya jika printer sudah terhubung. Connect printer terlebih dahulu
 
 ### ❓ Dashboard tidak update setelah transaksi di kasir?
 
-Pindah ke tab lain lalu kembali ke tab dashboard — data akan otomatis refresh.
+Data stok dan laporan terupdate otomatis jika online. Jika offline, data akan masuk setelah **Sync** berhasil.
 
 ### ❓ PWA / Install sebagai App?
 

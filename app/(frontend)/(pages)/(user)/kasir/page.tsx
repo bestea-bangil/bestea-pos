@@ -35,8 +35,7 @@ interface Category {
 }
 
 import { CategorySelector } from "./components/category-selector";
-import { InstallPrompt } from "@/components/pwa/install-prompt";
-import { SyncStatus } from "@/components/sync-status";
+import { KasirHeader } from "./components/kasir-header";
 import { ProductGrid } from "./components/product-grid";
 import { CartSection } from "./components/cart-section";
 import {
@@ -47,24 +46,13 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import {
-  Printer,
-  Check,
-  ShoppingBag,
-  Lock,
-  WalletCards,
-  Settings,
-  Store,
-  User,
-} from "lucide-react";
+import { Lock, ShoppingBag } from "lucide-react";
 import { PrinterProvider, usePrinter } from "./context/printer-context";
-import { TransactionHistory } from "./components/transaction-history";
 import { PaymentModal } from "./components/payment-modal";
 import { ShiftProvider, useShift } from "./context/shift-context";
 import { ShiftModal } from "./components/shift-modal";
 import { CashOutModal } from "./components/cash-out-modal";
 import { SizeSelectionModal } from "./components/size-selection-modal";
-import { PrinterSettingsModal } from "./components/printer-settings-modal";
 import { useBranch } from "@/contexts/branch-context";
 import { useRouter, usePathname } from "next/navigation";
 import { toast } from "sonner";
@@ -79,100 +67,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-
-function ConnectPrinterButton() {
-  const { disconnect, connect, isConnected, isConnecting, deviceName, error } =
-    usePrinter();
-  const [showDisconnectAlert, setShowDisconnectAlert] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-
-  const handlePrinterClick = () => {
-    if (isConnected) {
-      setShowDisconnectAlert(true);
-    } else {
-      connect();
-    }
-  };
-
-  return (
-    <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-1 shadow-sm">
-      <Button
-        variant={isConnected ? "outline" : "default"}
-        size="sm"
-        className={`flex gap-2 transition-all ${
-          isConnected
-            ? "bg-green-50 text-green-700 border-green-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 group"
-            : "bg-slate-800 text-white hover:bg-slate-900"
-        }`}
-        onClick={handlePrinterClick}
-        disabled={isConnecting}
-      >
-        {isConnected ? (
-          <>
-            <Check className="h-4 w-4 group-hover:hidden" />
-            <Printer className="h-4 w-4 hidden group-hover:block" />
-            <span className="hidden md:inline group-hover:hidden">
-              {deviceName || "Printer Connected"}
-            </span>
-            <span className="hidden md:group-hover:inline">Disconnect</span>
-          </>
-        ) : (
-          <>
-            <Printer className="h-4 w-4" />
-            <span className="hidden md:inline">
-              {isConnecting ? "Menghubungkan..." : "Connect Printer"}
-            </span>
-          </>
-        )}
-      </Button>
-
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-9 w-9 text-slate-500 hover:text-slate-900"
-        onClick={() => setShowSettings(true)}
-        title="Pengaturan Printer"
-      >
-        <Settings className="h-4 w-4" />
-      </Button>
-
-      <PrinterSettingsModal
-        isOpen={showSettings}
-        onOpenChange={setShowSettings}
-      />
-
-      <AlertDialog
-        open={showDisconnectAlert}
-        onOpenChange={setShowDisconnectAlert}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Putuskan koneksi printer?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Anda akan memutuskan koneksi dengan printer{" "}
-              <span className="font-medium text-slate-900">
-                {deviceName || "Bluetooth Printer"}
-              </span>
-              . Anda perlu menghubungkan ulang jika ingin mencetak struk.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Batal</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-red-600 hover:bg-red-700 text-white"
-              onClick={() => {
-                disconnect();
-                setShowDisconnectAlert(false);
-              }}
-            >
-              Putuskan
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
-  );
-}
 
 function KasirContent() {
   const router = useRouter();
@@ -215,10 +109,14 @@ function KasirContent() {
     "open",
   );
 
-  const handleOpenShiftModal = () => {
+  const handleOpenShiftModalCallback = useCallback(() => {
     setShiftModalMode("close"); // Trigger close shift manually
     setIsShiftModalOpen(true);
-  };
+  }, []);
+
+  const handleOpenCashOut = useCallback(() => {
+    setIsCashOutOpen(true);
+  }, []);
 
   // Transaction Context for Syncing
   const {
@@ -594,10 +492,30 @@ function KasirContent() {
   const dailyTransactions = allTransactions.filter(
     (t) =>
       new Date(t.date).toDateString() === new Date().toDateString() &&
-      t.status === "completed",
+      (t.status === "completed" || t.status === "pending"),
   );
 
-  const currentOrderNumber = `Order #${String(dailyTransactions.length + 1).padStart(3, "0")}`;
+  // Calculate next order number based on highest existing code
+  let nextOrderSeq = 1;
+  const highestCodeTrx = dailyTransactions
+    .filter((t) => t.transactionCode?.startsWith("#"))
+    .sort((a, b) => {
+      const numA = parseInt(a.transactionCode!.replace("#", "") || "0");
+      const numB = parseInt(b.transactionCode!.replace("#", "") || "0");
+      return numB - numA;
+    })[0];
+
+  if (highestCodeTrx?.transactionCode) {
+    const lastNum = parseInt(highestCodeTrx.transactionCode.replace("#", ""));
+    if (!isNaN(lastNum)) {
+      nextOrderSeq = lastNum + 1;
+    }
+  } else if (dailyTransactions.length > 0) {
+    // Fallback if codes aren't #XXX format
+    nextOrderSeq = dailyTransactions.length + 1;
+  }
+
+  const currentOrderNumber = `Order #${String(nextOrderSeq).padStart(3, "0")}`;
 
   if (isShiftLoading || isDataLoading) {
     return (
@@ -642,73 +560,18 @@ function KasirContent() {
       <div className="flex flex-1 overflow-hidden">
         {/* Left Column: Products */}
         <div className="flex-1 flex flex-col min-w-0">
-          <div className="p-4 md:p-6 pb-0">
-            <header className="mb-4 md:mb-6 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
-              <div className="flex-shrink-0">
-                <div className="flex items-center gap-3">
-                  <h1 className="text-xl md:text-2xl font-bold text-slate-800">
-                    {currentBranch?.name || "Kasir"}
-                  </h1>
-                  {isShiftOpen && (
-                    <span className="bg-green-100 text-green-700 text-[10px] uppercase tracking-wider px-2 py-1 rounded-full font-semibold border border-green-200 flex items-center gap-1.5 shadow-sm">
-                      <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse shadow-green-200 shadow-[0_0_8px]" />
-                      Open
-                    </span>
-                  )}
-                  {activeEmployee && isShiftOpen && (
-                    <span className="bg-blue-50 text-blue-700 text-xs px-2.5 py-1 rounded-full font-medium border border-blue-200 flex items-center gap-1.5">
-                      <User className="h-3 w-3" />
-                      {activeEmployee.name}
-                    </span>
-                  )}
-                </div>
-                <p className="text-sm text-slate-500 mt-1">
-                  Pilih kategori dan produk untuk dipesan.
-                </p>
-              </div>
+          <KasirHeader
+            branch={currentBranch}
+            activeEmployee={activeEmployee}
+            isShiftOpen={isShiftOpen}
+            shiftData={shiftData}
+            onOpenShiftModal={handleOpenShiftModalCallback}
+            onOpenCashOut={handleOpenCashOut}
+            transactions={shiftData?.transactions || []}
+            expenses={shiftData?.expenses || []}
+          />
 
-              <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-                <SyncStatus />
-                <InstallPrompt />
-                <ConnectPrinterButton />
-
-                <div className="h-8 w-px bg-slate-200 mx-1 hidden sm:block" />
-
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="flex gap-2 text-slate-700 hover:bg-slate-50 hover:text-slate-900 h-9 border border-slate-200 shadow-sm bg-white"
-                  onClick={() => setIsCashOutOpen(true)}
-                  title="Catat Pengeluaran"
-                >
-                  <WalletCards className="h-4 w-4 text-orange-500" />
-                  <span className="hidden lg:inline text-xs font-medium">
-                    Pengeluaran
-                  </span>
-                </Button>
-
-                <TransactionHistory
-                  transactions={shiftData?.transactions || []}
-                  expenses={shiftData?.expenses || []}
-                />
-
-                {isShiftOpen && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="flex gap-2 text-slate-500 hover:text-red-600 hover:bg-red-50 h-9 ml-auto sm:ml-0 border border-slate-200 shadow-sm bg-white"
-                    onClick={handleOpenShiftModal}
-                    title="Tutup Kasir"
-                  >
-                    <Lock className="h-4 w-4" />
-                    <span className="hidden lg:inline text-xs font-medium">
-                      Tutup Shift
-                    </span>
-                  </Button>
-                )}
-              </div>
-            </header>
-
+          <div className="p-4 md:p-6 pt-0">
             <CategorySelector
               categories={displayCategories}
               selectedCategory={selectedCategory}

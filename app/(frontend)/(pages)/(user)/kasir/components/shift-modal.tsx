@@ -335,13 +335,13 @@ export function ShiftModal({ isOpen, mode, onOpenChange }: ShiftModalProps) {
       await openShift(value, pendingEmployee, branchIdToUse);
 
       // Auto Clock In with late detection
-      if (currentBranch) {
+      if (branchIdToUse) {
         const shift = shiftType || "Shift"; // Use actual shift type from schedule
         // Use startTime from schedule for late check
         const lateStatus = startTime ? isLate(startTime) : false;
         const status = lateStatus ? "Terlambat" : "Hadir";
 
-        clockIn(pendingEmployee.id, currentBranch.id, shift, status)
+        clockIn(pendingEmployee.id, branchIdToUse, shift, status)
           .then(() => {
             if (lateStatus) {
               toast.warning("Absensi Masuk - TERLAMBAT", {
@@ -353,7 +353,10 @@ export function ShiftModal({ isOpen, mode, onOpenChange }: ShiftModalProps) {
             }
           })
           .catch((err) => {
-            toast.error("Gagal mencatat absensi masuk");
+            console.error("Auto Clock-in failed", err);
+            toast.error("Gagal mencatat absensi masuk", {
+              description: err.message,
+            });
           });
       }
 

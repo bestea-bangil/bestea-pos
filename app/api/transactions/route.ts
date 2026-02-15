@@ -13,6 +13,51 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
   },
 });
 
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const shiftSessionId = searchParams.get("shiftSessionId");
+  const branchId = searchParams.get("branchId");
+
+  try {
+    let query = supabase
+      .from("transactions")
+      .select(`
+        *,
+        transaction_items (
+          product_id,
+          product_name,
+          variant_name,
+          price,
+          quantity
+        ),
+        branches (
+          name
+        )
+      `)
+      .order("created_at", { ascending: false });
+
+    if (shiftSessionId) {
+      query = query.eq("shift_session_id", shiftSessionId);
+    } else if (branchId) {
+      query = query.eq("branch_id", branchId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error("Supabase Transaction Fetch Error:", error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json(data);
+  } catch (error) {
+    return NextResponse.json(
+      { error: "Internal Server Error", details: error },
+      { status: 500 },
+    );
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();

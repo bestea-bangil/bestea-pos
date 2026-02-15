@@ -36,7 +36,7 @@ export function SyncStatus() {
                 <WifiOff className="h-3 w-3" />
               )}
               <span className="hidden sm:inline">
-                {isOnline ? "Online" : "Offline"}
+                {isOnline ? "Online" : "Mode Lokal"}
               </span>
             </div>
           </TooltipTrigger>
@@ -50,7 +50,7 @@ export function SyncStatus() {
         </Tooltip>
       </TooltipProvider>
 
-      {/* Sync Button - Always Visible but Disabled if Syncing or Offline with no pending */}
+      {/* Sync Button - Always Visible but Disabled if Syncing or No Pending Items */}
       <Button
         variant="outline"
         size="sm"
@@ -60,11 +60,11 @@ export function SyncStatus() {
             : "bg-white text-slate-700"
         }`}
         onClick={handleSync}
-        disabled={isSyncing || (!isOnline && pendingCount === 0)}
+        disabled={isSyncing || pendingCount === 0}
         title={
           pendingCount > 0
             ? `${pendingCount} data belum disinkronkan`
-            : "Sinkronisasi Data"
+            : "Tidak ada data pending"
         }
       >
         <div className={`relative ${isSyncing ? "animate-spin" : ""}`}>

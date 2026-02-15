@@ -126,7 +126,7 @@ export async function POST(request: Request) {
         .select("id")
         .eq("employee_id", employeeId)
         .eq("date", recordDate)
-        .single();
+        .maybeSingle();
     
     if (existing) {
         return NextResponse.json(
@@ -190,8 +190,39 @@ export async function PUT(request: Request) {
                 .maybeSingle();
 
             if (!openRecord) {
-                // Determine if we should fail or perhaps they are already clocked out?
-                // For user feedback, it's better to say "No active shift found".
+                // FALLBACK: If no open record, create one (Auto-Clock In/Out)
+                // This prevents blocking "Close Shift" if "Open Shift" clock-in failed.
+                
+                const { data: emp } = await supabase
+                    .from("employees")
+                    .select("branch_id")
+                    .eq("id", employeeId)
+                    .single();
+
+                if (emp && emp.branch_id) {
+                     const now = new Date().toISOString();
+                     const today = getJakartaYYYYMMDD();
+                     
+                     const { data: newRecord, error: createError } = await supabase
+                         .from("attendance_records")
+                         .insert({
+                             employee_id: employeeId,
+                             branch_id: emp.branch_id,
+                             date: today,
+                             check_in: now,
+                             check_out: now,
+                             status: bodyStatus || "Hadir",
+                             shift: "Shift", 
+                             notes: (notes || "") + " (Auto-fix: Missing Clock In)"
+                          })
+                         .select()
+                         .single();
+                     
+                     if (!createError && newRecord) {
+                         return NextResponse.json(newRecord);
+                     }
+                }
+
                 return NextResponse.json({ error: "Tidak ada sesi absen aktif yang ditemukan." }, { status: 404 });
             }
             recordId = openRecord.id;

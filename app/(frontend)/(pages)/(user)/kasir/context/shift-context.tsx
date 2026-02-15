@@ -26,7 +26,7 @@ export interface ShiftEmployee {
   branchId?: string;
 }
 
-interface ShiftData {
+export interface ShiftData {
   startTime: string | null;
   endTime: string | null;
   initialCash: number;
