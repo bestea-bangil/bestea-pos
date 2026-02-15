@@ -20,8 +20,15 @@ const withPWA = require("@ducanh2912/next-pwa").default({
       },
       {
         urlPattern: /^https?:\/\/.*\/api\/.*/i,
-        handler: "NetworkOnly",
+        handler: "StaleWhileRevalidate",
         method: "GET",
+        options: {
+          cacheName: "apis",
+          expiration: {
+            maxEntries: 50,
+            maxAgeSeconds: 24 * 60 * 60, // 24 hours
+          },
+        },
       },
     ],
   },

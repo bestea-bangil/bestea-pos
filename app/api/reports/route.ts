@@ -10,9 +10,10 @@ import {
   startOfYear,
   endOfYear,
   subDays,
-  isWithinInterval,
-  parseISO
+  parseISO,
+  format,
 } from "date-fns";
+import { getJakartaYYYYMMDD } from "@/lib/date-utils";
 
 export const dynamic = 'force-dynamic';
 
@@ -32,51 +33,63 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const branchId = searchParams.get("branchId") || "all";
     const period = searchParams.get("period") || "today"; // today, yesterday, etc.
-    // Or support custom range
     const startDateParam = searchParams.get("startDate");
     const endDateParam = searchParams.get("endDate");
 
-    const WIB_OFFSET = 7 * 60 * 60 * 1000;
-    const now = new Date();
-    const nowWIB = new Date(now.getTime() + WIB_OFFSET);
-
-    let startLocal: Date, endLocal: Date;
+    let startIso: string;
+    let endIso: string;
 
     if (startDateParam && endDateParam) {
-        startLocal = startOfDay(parseISO(startDateParam));
-        endLocal = endOfDay(parseISO(endDateParam));
+        // Assume params are YYYY-MM-DD
+        startIso = `${startDateParam}T00:00:00+07:00`;
+        endIso = `${endDateParam}T23:59:59.999+07:00`;
     } else {
+        // Get Today in Jakarta (YYYY-MM-DD)
+        const todayStr = getJakartaYYYYMMDD();
+        const todayDate = parseISO(todayStr); // Local date object (00:00 system time)
+
+        let startLocal: Date;
+        let endLocal: Date;
+
         switch (period) {
           case "today":
-            startLocal = startOfDay(nowWIB);
-            endLocal = endOfDay(nowWIB);
+            startLocal = startOfDay(todayDate);
+            endLocal = endOfDay(todayDate);
             break;
           case "yesterday":
-            const yesterdayWIB = subDays(nowWIB, 1);
-            startLocal = startOfDay(yesterdayWIB);
-            endLocal = endOfDay(yesterdayWIB);
+            const yesterday = subDays(todayDate, 1);
+            startLocal = startOfDay(yesterday);
+            endLocal = endOfDay(yesterday);
             break;
           case "this_week":
-            startLocal = startOfWeek(nowWIB, { weekStartsOn: 1 });
-            endLocal = endOfWeek(nowWIB, { weekStartsOn: 1 });
+            startLocal = startOfWeek(todayDate, { weekStartsOn: 1 });
+            endLocal = endOfWeek(todayDate, { weekStartsOn: 1 });
             break;
           case "this_month":
-            startLocal = startOfMonth(nowWIB);
-            endLocal = endOfMonth(nowWIB);
+            startLocal = startOfMonth(todayDate);
+            endLocal = endOfMonth(todayDate);
             break;
           case "this_year":
-            startLocal = startOfYear(nowWIB);
-            endLocal = endOfYear(nowWIB);
+            startLocal = startOfYear(todayDate);
+            endLocal = endOfYear(todayDate);
             break;
           default:
-            startLocal = startOfDay(nowWIB);
-            endLocal = endOfDay(nowWIB);
+            startLocal = startOfDay(todayDate);
+            endLocal = endOfDay(todayDate);
         }
+
+        // Format back to YYYY-MM-DD string to ensure we drop any system timezone artifacts
+        const startYMD = format(startLocal, "yyyy-MM-dd");
+        const endYMD = format(endLocal, "yyyy-MM-dd");
+
+        // Append Jakarta Offset explicitly
+        startIso = `${startYMD}T00:00:00+07:00`;
+        endIso = `${endYMD}T23:59:59.999+07:00`;
     }
 
-    // Convert local WIB boundaries back to UTC ISO for database query
-    const start = new Date(startLocal.getTime() - WIB_OFFSET);
-    const end = new Date(endLocal.getTime() - WIB_OFFSET);
+    // Convert to UTC Date objects for Supabase Query
+    const start = new Date(startIso);
+    const end = new Date(endIso);
 
     // 1. Fetch Transactions
     let trxQuery = supabase

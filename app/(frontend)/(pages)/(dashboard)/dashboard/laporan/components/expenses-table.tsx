@@ -58,7 +58,7 @@ export function ExpensesTable({ expenses }: ExpensesTableProps) {
               <TableHead>Tanggal</TableHead>
               <TableHead>Cabang</TableHead>
               <TableHead>Staff</TableHead>
-              <TableHead>Ket.</TableHead>
+              <TableHead>Keterangan</TableHead>
               <TableHead className="text-right">Jumlah</TableHead>
             </TableRow>
           </TableHeader>
@@ -86,10 +86,13 @@ export function ExpensesTable({ expenses }: ExpensesTableProps) {
                   <TableCell className="text-xs text-muted-foreground">
                     {item.employeeName}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="text-xs">
                     <div className="flex flex-col gap-1">
                       <span className="text-sm">{item.note}</span>
-                      <Badge variant="outline" className="w-fit text-[10px]">
+                      <Badge
+                        variant="outline"
+                        className="w-fit text-[10px] bg-yellow-50 text-yellow-700 border-yellow-500"
+                      >
                         {item.category}
                       </Badge>
                     </div>
