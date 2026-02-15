@@ -13,10 +13,14 @@ interface BesteaDB extends DBSchema {
     key: string;
     value: any;
   };
+  expenses: {
+    key: string;
+    value: any;
+  };
 }
 
 const DB_NAME = 'bestea-pos-db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbPromise: Promise<IDBPDatabase<BesteaDB>>;
 
@@ -32,6 +36,9 @@ export const initDB = () => {
         }
         if (!db.objectStoreNames.contains('products')) {
           db.createObjectStore('products', { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains('expenses')) {
+          db.createObjectStore('expenses', { keyPath: 'id' });
         }
       },
     });
@@ -91,4 +98,22 @@ export const getPendingAttendance = async () => {
 export const deleteAttendance = async (id: string) => {
   const db = await initDB();
   await db.delete('attendance', id);
+};
+
+export const saveOfflineExpense = async (expense: any) => {
+  const db = await initDB();
+  if (!expense.id) {
+    expense.id = crypto.randomUUID();
+  }
+  await db.put('expenses', { ...expense, offline: true, timestamp: Date.now() });
+};
+
+export const getPendingExpenses = async () => {
+  const db = await initDB();
+  return db.getAll('expenses');
+};
+
+export const deleteExpense = async (id: string) => {
+  const db = await initDB();
+  await db.delete('expenses', id);
 };

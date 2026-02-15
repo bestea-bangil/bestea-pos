@@ -8,6 +8,7 @@ import {
   ReactNode,
 } from "react";
 import { Transaction } from "../data/mock-data";
+import { useSync } from "@/contexts/sync-context";
 
 export interface Expense {
   id: string;
@@ -325,6 +326,97 @@ export function ShiftProvider({ children }: { children: ReactNode }) {
       };
     });
   };
+
+  // Sync Integration
+  const { lastSynced } = useSync();
+
+  const refreshShiftData = async () => {
+    if (!shiftData.sessionId) return;
+
+    try {
+      const res = await fetch(`/api/shift-sessions/${shiftData.sessionId}`);
+      if (res.ok) {
+        const session = await res.json();
+
+        // Transform API data to ShiftData format
+        const refreshedData: ShiftData = {
+          ...shiftData,
+          totalCashTransactions: session.cash_transactions_total || 0,
+          totalQrisTransactions: session.qris_transactions_total || 0,
+          totalExpenses: session.expenses_total || 0,
+          // We need to fetch transactions and expenses specifically if the session endpoint doesn't return them array-wise
+          // Assuming the session endpoint might not return all child data, we might need separate calls or a compund call.
+          // For now, let's assume we rely on the session totals, but for the TABLE list, we need the actual items.
+          // If the API doesn't return items, we might need to fetch them.
+          // Let's try to fetch transactions for this session.
+        };
+
+        // Fetch specific transactions for this session to update IDs
+        const trxRes = await fetch(
+          `/api/transactions?shiftSessionId=${shiftData.sessionId}`,
+        );
+        const expRes = await fetch(
+          `/api/expenses?shiftSessionId=${shiftData.sessionId}`,
+        );
+
+        if (trxRes.ok && expRes.ok) {
+          const transactions = await trxRes.json();
+          const expenses = await expRes.json();
+
+          setShiftData((prev) => ({
+            ...prev,
+            ...refreshedData,
+            transactions: transactions.map((t: any) => ({
+              id: t.id,
+              transactionCode: t.transaction_code,
+              date: new Date(t.created_at).toLocaleDateString("id-ID", {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              }),
+              paymentMethod: t.payment_method,
+              total: t.total_amount,
+              time: new Date(t.created_at).toLocaleTimeString("id-ID", {
+                hour: "2-digit",
+                minute: "2-digit",
+              }),
+              status: t.status === "void" ? "cancelled" : "completed",
+              items: t.transaction_items.map((i: any) => ({
+                productId: i.product_id,
+                name: i.product_name,
+                price: i.price,
+                quantity: i.quantity,
+                variant: i.variant_name,
+              })),
+              employeeId: t.cashier_id,
+              employeeName: t.cashier_name,
+              branchName: t.branches?.name,
+              cashierName: t.cashier_name,
+            })),
+            expenses: expenses.map((e: any) => ({
+              id: e.id,
+              amount: e.amount,
+              description: e.description,
+              time: new Date(e.created_at).toLocaleTimeString("id-ID", {
+                hour: "2-digit",
+                minute: "2-digit",
+              }),
+              employeeId: e.recorded_by,
+              employeeName: e.recorded_by_name,
+            })),
+          }));
+        }
+      }
+    } catch (error) {
+      console.error("Failed to refresh shift data", error);
+    }
+  };
+
+  useEffect(() => {
+    if (lastSynced && isShiftOpen) {
+      refreshShiftData();
+    }
+  }, [lastSynced, isShiftOpen]);
 
   return (
     <ShiftContext.Provider

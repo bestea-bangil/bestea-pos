@@ -365,18 +365,47 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
 
   const addExpense = useCallback(
     async (expData: Omit<Expense, "id" | "date">) => {
-      const { error } = await supabase.from("expenses").insert({
-        branch_id: expData.branchId,
-        category: expData.category,
-        description: expData.description,
-        amount: expData.amount,
-        recorded_by: expData.employeeId, // Use UUID for relation
-        recorded_by_name: expData.recordedBy, // Keep name for legacy/display
-        shift_session_id: expData.shiftSessionId,
-      });
+      try {
+        // Offline Handling
+        if (typeof navigator !== "undefined" && !navigator.onLine) {
+          const offlineId = `exp-offline-${Date.now()}`;
+          const now = new Date().toISOString();
 
-      if (error) throw error;
-      await fetchExpenses();
+          const offlineExpense: Expense = {
+            id: offlineId,
+            date: now,
+            branchId: expData.branchId,
+            branchName: expData.branchName,
+            category: expData.category,
+            description: expData.description,
+            amount: expData.amount,
+            recordedBy: expData.recordedBy,
+            employeeId: expData.employeeId,
+            shiftSessionId: expData.shiftSessionId,
+          };
+
+          const { saveOfflineExpense } = await import("@/lib/offline-db");
+          await saveOfflineExpense(offlineExpense);
+
+          setExpenses((prev) => [offlineExpense, ...prev]);
+          return;
+        }
+
+        const { error } = await supabase.from("expenses").insert({
+          branch_id: expData.branchId,
+          category: expData.category,
+          description: expData.description,
+          amount: expData.amount,
+          recorded_by: expData.employeeId, // Use UUID for relation
+          recorded_by_name: expData.recordedBy, // Keep name for legacy/display
+          shift_session_id: expData.shiftSessionId,
+        });
+
+        if (error) throw error;
+        await fetchExpenses();
+      } catch (error) {
+        console.error("Error adding expense:", error);
+      }
     },
     [fetchExpenses],
   );
