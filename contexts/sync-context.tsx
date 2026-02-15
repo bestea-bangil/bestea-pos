@@ -77,11 +77,23 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       const transactions = await getPendingTransactions();
       for (const tx of transactions) {
         try {
-          const { offline, id, timestamp, ...txData } = tx;
+          const { offline, id, timestamp, items, ...txData } = tx;
+
+          // API expects { transaction: {...}, items: [...] }
+          // We need to pass 'items' separately and 'transaction' object
+          const payload = {
+            transaction: {
+              ...txData,
+              // Ensure required fields for API are present (e.g. status)
+              status: txData.status || "completed",
+            },
+            items: items || [],
+          };
+
           const response = await fetch("/api/transactions", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(txData),
+            body: JSON.stringify(payload),
           });
           if (!response.ok) throw new Error("Failed to sync transaction");
           await deleteTransaction(id);

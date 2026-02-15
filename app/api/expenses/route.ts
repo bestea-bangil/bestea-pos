@@ -17,7 +17,7 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { category, amount, description, branchId, recordedBy, date } = body;
+    const { category, amount, description, branchId, recordedBy, date, shiftSessionId } = body;
 
     // Validate
     if (!category || !amount || !branchId) {
@@ -33,7 +33,8 @@ export async function POST(request: Request) {
           description,
           branch_id: branchId,
           recorded_by: recordedBy,
-          date: date || new Date().toISOString(), // Allow custom date or default to now
+          date: date || new Date().toISOString(),
+          shift_session_id: shiftSessionId,
         },
       ])
       .select()
