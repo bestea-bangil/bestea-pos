@@ -501,7 +501,31 @@ function KasirContent() {
           addTransactionToShift(shiftTransaction);
         }
 
-        // 3. Stock Reduction is now handled by API (skipped in simulation)
+        // 3. Stock Reduction (Optimistic / Offline)
+        if (transactionItems.length > 0) {
+          const { saveProductsCache } = await import("@/lib/offline-db");
+
+          setProducts((prevProducts) => {
+            const updatedProducts = prevProducts.map((p) => {
+              // Find all cart items for this product (aggregated if multiple variants)
+              const totalQuantitySold = cartItems
+                .filter((item) => item.id === p.id)
+                .reduce((sum, item) => sum + item.quantity, 0);
+
+              if (totalQuantitySold > 0 && p.trackStock) {
+                return {
+                  ...p,
+                  stock: p.stock - totalQuantitySold,
+                };
+              }
+              return p;
+            });
+
+            // Save to offline cache
+            saveProductsCache(updatedProducts);
+            return updatedProducts;
+          });
+        }
 
         // 4. Print Receipt
         // Construct the object expected by printReceipt

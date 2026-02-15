@@ -9,6 +9,7 @@ import React, {
   ReactNode,
 } from "react";
 import { supabase } from "@/lib/supabase/client";
+import { useSync } from "@/contexts/sync-context";
 import type {
   Transaction as DBTransaction,
   TransactionItem as DBTransactionItem,
@@ -206,6 +207,21 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
     };
     init();
   }, [fetchTransactions, fetchExpenses]);
+
+  // Sync Integration
+  const { lastSynced } = useSync();
+
+  useEffect(() => {
+    if (lastSynced) {
+      console.log(
+        "Sync completed at",
+        lastSynced,
+        "- Refetching transactions...",
+      );
+      fetchTransactions();
+      fetchExpenses();
+    }
+  }, [lastSynced, fetchTransactions, fetchExpenses]);
 
   // Realtime subscriptions
   useEffect(() => {
