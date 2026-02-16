@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useShift, ShiftEmployee } from "../context/shift-context";
 import { useBranch } from "@/contexts/branch-context";
-import { Banknote, AlertTriangle, User } from "lucide-react";
+import { Banknote, AlertTriangle, User, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   AlertDialog,
@@ -173,6 +173,7 @@ export function ShiftModal({ isOpen, mode, onOpenChange }: ShiftModalProps) {
   const [summary, setSummary] = useState<any>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [notes, setNotes] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   // PIN Entry states
   const [showPinModal, setShowPinModal] = useState(false);
@@ -188,6 +189,7 @@ export function ShiftModal({ isOpen, mode, onOpenChange }: ShiftModalProps) {
       setSummary(null);
       setShowConfirm(false);
       setNotes("");
+      setIsLoading(false);
       setPendingEmployee(null);
       // For opening shift, always require PIN first
       setStep(mode === "open" ? "pin" : "amount");
@@ -230,17 +232,24 @@ export function ShiftModal({ isOpen, mode, onOpenChange }: ShiftModalProps) {
       // Check for existing open shift for this branch
       const branchIdToCheck = currentBranch?.id || employee.branchId || "";
       if (branchIdToCheck) {
+        setIsLoading(true);
         toast.loading("Memeriksa sesi aktif...", { id: "check-session" });
-        const activeSession = await checkActiveSession(branchIdToCheck);
-        toast.dismiss("check-session");
+        try {
+          const activeSession = await checkActiveSession(branchIdToCheck);
 
-        if (activeSession) {
-          resumeShift(activeSession);
-          toast.success("Melanjutkan Sesi Shift", {
-            description: `Shift sebelumnya belum ditutup. Melanjutkan shift ${activeSession.opener?.name || ""}.`,
-          });
-          onOpenChange(false);
-          return;
+          if (activeSession) {
+            resumeShift(activeSession);
+            toast.success("Melanjutkan Sesi Shift", {
+              description: `Shift sebelumnya belum ditutup. Melanjutkan shift ${activeSession.opener?.name || ""}.`,
+            });
+            onOpenChange(false);
+            return;
+          }
+        } catch (error) {
+          console.error("Error checking session:", error);
+        } finally {
+          setIsLoading(false);
+          toast.dismiss("check-session");
         }
       }
     }
@@ -266,106 +275,116 @@ export function ShiftModal({ isOpen, mode, onOpenChange }: ShiftModalProps) {
         return;
       }
 
-      // Check if employee has schedule for today
-      const dayNames = [
-        "Senin",
-        "Selasa",
-        "Rabu",
-        "Kamis",
-        "Jumat",
-        "Sabtu",
-        "Minggu",
-      ];
-      const todayName = dayNames[getDayIndex()];
+      setIsLoading(true);
 
-      toast.loading("Memeriksa jadwal...", { id: "check-schedule" });
-      const { hasSchedule, shiftType, startTime } = await checkEmployeeSchedule(
-        pendingEmployee.id,
-      );
-      toast.dismiss("check-schedule");
+      try {
+        // Check if employee has schedule for today
+        const dayNames = [
+          "Senin",
+          "Selasa",
+          "Rabu",
+          "Kamis",
+          "Jumat",
+          "Sabtu",
+          "Minggu",
+        ];
+        const todayName = dayNames[getDayIndex()];
 
-      if (!hasSchedule) {
-        const message =
-          shiftType === "Libur"
-            ? `${pendingEmployee.name} dijadwalkan LIBUR hari ini (${todayName}).`
-            : `${pendingEmployee.name} tidak memiliki jadwal untuk hari ini (${todayName}).`;
+        toast.loading("Memeriksa jadwal...", { id: "check-schedule" });
+        const { hasSchedule, shiftType, startTime } =
+          await checkEmployeeSchedule(pendingEmployee.id);
+        toast.dismiss("check-schedule");
 
-        toast.error("Tidak Dapat Membuka Shift", {
-          description:
-            message + " Silakan hubungi Admin untuk mengatur jadwal.",
-          duration: 4000,
-        });
+        if (!hasSchedule) {
+          const message =
+            shiftType === "Libur"
+              ? `${pendingEmployee.name} dijadwalkan LIBUR hari ini (${todayName}).`
+              : `${pendingEmployee.name} tidak memiliki jadwal untuk hari ini (${todayName}).`;
 
-        setTimeout(() => {
-          window.location.href = "/login";
-        }, 3000);
+          toast.error("Tidak Dapat Membuka Shift", {
+            description:
+              message + " Silakan hubungi Admin untuk mengatur jadwal.",
+            duration: 4000,
+          });
 
-        return;
-      }
+          setTimeout(() => {
+            window.location.href = "/login";
+          }, 3000);
 
-      // Check if already checked in today
-      const alreadyCheckedIn = await checkAlreadyCheckedIn(pendingEmployee.id);
-      if (alreadyCheckedIn) {
-        toast.info("Sudah Absen Hari Ini", {
-          description: `${pendingEmployee.name} sudah melakukan absensi masuk hari ini.`,
-          duration: 5000,
-        });
+          return;
+        }
+
+        // Check if already checked in today
+        const alreadyCheckedIn = await checkAlreadyCheckedIn(
+          pendingEmployee.id,
+        );
+        if (alreadyCheckedIn) {
+          toast.info("Sudah Absen Hari Ini", {
+            description: `${pendingEmployee.name} sudah melakukan absensi masuk hari ini.`,
+            duration: 5000,
+          });
+          const branchIdToUse = currentBranch?.id || pendingEmployee.branchId;
+          if (!branchIdToUse) {
+            toast.error("Gagal membuka shift: Data cabang tidak ditemukan");
+            return;
+          }
+
+          openShift(value, pendingEmployee, branchIdToUse);
+          toast.success("Shift berhasil dibuka!", {
+            description: `${pendingEmployee.name} - (Absensi sudah tercatat sebelumnya)`,
+            duration: 5000,
+          });
+          onOpenChange(false);
+          return;
+        }
+
         const branchIdToUse = currentBranch?.id || pendingEmployee.branchId;
+
         if (!branchIdToUse) {
           toast.error("Gagal membuka shift: Data cabang tidak ditemukan");
           return;
         }
 
-        openShift(value, pendingEmployee, branchIdToUse);
+        await openShift(value, pendingEmployee, branchIdToUse);
+
+        // Auto Clock In with late detection
+        if (branchIdToUse) {
+          const shift = shiftType || "Shift"; // Use actual shift type from schedule
+          // Use startTime from schedule for late check
+          const lateStatus = startTime ? isLate(startTime) : false;
+          const status = lateStatus ? "Terlambat" : "Hadir";
+
+          await clockIn(pendingEmployee.id, branchIdToUse, shift, status)
+            .then(() => {
+              if (lateStatus) {
+                toast.warning("Absensi Masuk - TERLAMBAT", {
+                  description: `Shift ${shift} dimulai jam ${startTime?.slice(0, 5)}. Toleransi ${LATE_TOLERANCE_MINUTES} menit.`,
+                  duration: 6000,
+                });
+              } else {
+                toast.success("Absensi Masuk Berhasil");
+              }
+            })
+            .catch((err) => {
+              console.error("Auto Clock-in failed", err);
+              toast.error("Gagal mencatat absensi masuk", {
+                description: err.message,
+              });
+            });
+        }
+
+        const now = new Date();
         toast.success("Shift berhasil dibuka!", {
-          description: `${pendingEmployee.name} - (Absensi sudah tercatat sebelumnya)`,
+          description: `${pendingEmployee.name} - Absen Masuk: ${now.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}`,
           duration: 5000,
         });
         onOpenChange(false);
-        return;
+      } catch (error) {
+        console.error("Error opening shift:", error);
+        toast.error("Gagal membuka shift");
+      } finally {
+        setIsLoading(false);
       }
-
-      const branchIdToUse = currentBranch?.id || pendingEmployee.branchId;
-
-      if (!branchIdToUse) {
-        toast.error("Gagal membuka shift: Data cabang tidak ditemukan");
-        return;
-      }
-
-      await openShift(value, pendingEmployee, branchIdToUse);
-
-      // Auto Clock In with late detection
-      if (branchIdToUse) {
-        const shift = shiftType || "Shift"; // Use actual shift type from schedule
-        // Use startTime from schedule for late check
-        const lateStatus = startTime ? isLate(startTime) : false;
-        const status = lateStatus ? "Terlambat" : "Hadir";
-
-        clockIn(pendingEmployee.id, branchIdToUse, shift, status)
-          .then(() => {
-            if (lateStatus) {
-              toast.warning("Absensi Masuk - TERLAMBAT", {
-                description: `Shift ${shift} dimulai jam ${startTime?.slice(0, 5)}. Toleransi ${LATE_TOLERANCE_MINUTES} menit.`,
-                duration: 6000,
-              });
-            } else {
-              toast.success("Absensi Masuk Berhasil");
-            }
-          })
-          .catch((err) => {
-            console.error("Auto Clock-in failed", err);
-            toast.error("Gagal mencatat absensi masuk", {
-              description: err.message,
-            });
-          });
-      }
-
-      const now = new Date();
-      toast.success("Shift berhasil dibuka!", {
-        description: `${pendingEmployee.name} - Absen Masuk: ${now.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}`,
-        duration: 5000,
-      });
-      onOpenChange(false);
     } else {
       // For closing, require PIN confirmation
       setShowPinModal(true);
@@ -384,43 +403,52 @@ export function ShiftModal({ isOpen, mode, onOpenChange }: ShiftModalProps) {
     setPendingEmployee(employee);
     setShowPinModal(false);
 
-    // Check for early closure
-    toast.loading("Memeriksa jadwal...", { id: "check-schedule-close" });
-    const { hasSchedule, endTime } = await checkEmployeeSchedule(employee.id);
-    toast.dismiss("check-schedule-close");
+    setIsLoading(true);
+    try {
+      // Check for early closure
+      toast.loading("Memeriksa jadwal...", { id: "check-schedule-close" });
+      const { hasSchedule, endTime } = await checkEmployeeSchedule(employee.id);
 
-    if (hasSchedule && endTime) {
-      const now = new Date();
-      const [endHour, endMinute] = endTime.split(":").map(Number);
-      const shiftEnd = new Date(now);
-      shiftEnd.setHours(endHour, endMinute, 0, 0);
+      if (hasSchedule && endTime) {
+        const now = new Date();
+        const [endHour, endMinute] = endTime.split(":").map(Number);
+        const shiftEnd = new Date(now);
+        shiftEnd.setHours(endHour, endMinute, 0, 0);
 
-      // tolerance: consider early if > 30 mins before end time
-      // difference in milliseconds
-      const diff = shiftEnd.getTime() - now.getTime();
-      const diffMinutes = Math.floor(diff / 60000);
+        // tolerance: consider early if > 30 mins before end time
+        // difference in milliseconds
+        const diff = shiftEnd.getTime() - now.getTime();
+        const diffMinutes = Math.floor(diff / 60000);
 
-      if (diffMinutes > 30) {
-        setIsEarlyClosing(true);
-        setScheduledEndTime(endTime.slice(0, 5));
+        if (diffMinutes > 30) {
+          setIsEarlyClosing(true);
+          setScheduledEndTime(endTime.slice(0, 5));
+        } else {
+          setIsEarlyClosing(false);
+          setScheduledEndTime(null);
+        }
       } else {
         setIsEarlyClosing(false);
-        setScheduledEndTime(null);
       }
-    } else {
-      setIsEarlyClosing(false);
-    }
 
-    setShowConfirm(true);
+      setShowConfirm(true);
+    } catch (error) {
+      console.error("Error checking schedule for close:", error);
+      // Fallback to show confirm anyway strictly speaking, but let's just show error
+      toast.error("Gagal memeriksa jadwal");
+    } finally {
+      setIsLoading(false);
+      toast.dismiss("check-schedule-close");
+    }
   };
 
   const handleConfirmClosure = async () => {
     const value = parseNumber(amount);
     if (!pendingEmployee) return;
 
+    setIsLoading(true);
     try {
       toast.loading("Menutup shift...", { id: "close-shift" });
-      await closeShift(value, pendingEmployee, notes);
 
       // Auto Clock Out - Pass status if early
       // Fix: Send undefined to keep DB status check happy (e.g. "Hadir" or "Terlambat" from clock-in)
@@ -441,10 +469,8 @@ export function ShiftModal({ isOpen, mode, onOpenChange }: ShiftModalProps) {
       // (Or we update the API to allow updating notes on clockout, but let's stick to the plan: fix ID error first).
 
       await closeShift(value, pendingEmployee, finalNotes);
-      await closeShift(value, pendingEmployee, finalNotes);
       await clockOut(pendingEmployee.id, clockOutStatus);
 
-      toast.dismiss("close-shift");
       toast.success("Shift Berhasil Ditutup", {
         description: "Laporan shift disimpan. Logout...",
       });
@@ -456,10 +482,12 @@ export function ShiftModal({ isOpen, mode, onOpenChange }: ShiftModalProps) {
       logout();
       router.push("/login"); // or wherever the login page is
     } catch (err: any) {
-      toast.dismiss("close-shift");
       toast.error("Gagal menutup shift", {
         description: err.message || "Terjadi kesalahan pada server",
       });
+    } finally {
+      setIsLoading(false);
+      toast.dismiss("close-shift");
     }
   };
 
@@ -480,7 +508,7 @@ export function ShiftModal({ isOpen, mode, onOpenChange }: ShiftModalProps) {
         }
         successMessage={mode === "close" ? null : undefined} // Suppress welcome toast on close
       />
-      <Dialog open={isOpen} onOpenChange={onOpenChange}>
+      <Dialog open={isOpen} onOpenChange={isLoading ? () => {} : onOpenChange}>
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -509,6 +537,7 @@ export function ShiftModal({ isOpen, mode, onOpenChange }: ShiftModalProps) {
                   autoFocus
                   inputMode="numeric"
                   pattern="[0-9]*"
+                  disabled={isLoading}
                 />
               </div>
             </div>
@@ -524,6 +553,7 @@ export function ShiftModal({ isOpen, mode, onOpenChange }: ShiftModalProps) {
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Contoh: Selisih uang parkir, dll..."
                   className="focus:border-orange-500 focus:ring-orange-500"
+                  disabled={isLoading}
                 />
               </div>
             )}
@@ -534,20 +564,34 @@ export function ShiftModal({ isOpen, mode, onOpenChange }: ShiftModalProps) {
               variant="outline"
               onClick={() => onOpenChange(false)}
               className="flex-1"
+              disabled={isLoading}
             >
               Batal
             </Button>
             <Button
               className={`flex-1 ${mode === "open" ? "bg-green-600 hover:bg-green-700 shadow-green-100" : "bg-orange-600 hover:bg-orange-700 shadow-orange-100"} shadow-lg text-white font-semibold`}
               onClick={handleSubmit}
+              disabled={isLoading}
             >
-              {mode === "open" ? "Buka Kasir" : "Selesai & Logout"}
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Memproses...
+                </>
+              ) : mode === "open" ? (
+                "Buka Kasir"
+              ) : (
+                "Selesai & Logout"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={showConfirm} onOpenChange={setShowConfirm}>
+      <AlertDialog
+        open={showConfirm}
+        onOpenChange={isLoading ? () => {} : setShowConfirm}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle
@@ -574,7 +618,7 @@ export function ShiftModal({ isOpen, mode, onOpenChange }: ShiftModalProps) {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogCancel disabled={isLoading}>Batal</AlertDialogCancel>
             <AlertDialogAction
               className={
                 isEarlyClosing
@@ -582,8 +626,18 @@ export function ShiftModal({ isOpen, mode, onOpenChange }: ShiftModalProps) {
                   : "bg-green-600 hover:bg-green-700 text-white"
               }
               onClick={handleConfirmClosure}
+              disabled={isLoading}
             >
-              {isEarlyClosing ? "Ya, Tetap Tutup" : "Ya, Sudah Benar"}
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Menutup...
+                </>
+              ) : isEarlyClosing ? (
+                "Ya, Tetap Tutup"
+              ) : (
+                "Ya, Sudah Benar"
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
