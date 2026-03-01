@@ -1,6 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
+import { signToken } from "@/lib/jwt";
+import { cookies } from "next/headers";
 
 // Initialize Supabase Client with Service Role Key for secure access
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -83,6 +85,28 @@ export async function POST(request: Request) {
     }
 
     if (isPasswordMatch) {
+      // Create JWT payload
+      const payload = {
+        employeeId: employeeData.id,
+        role: employeeData.role,
+        branchId: employeeData.branches ? employeeData.branches.id : null,
+      };
+
+      // Generate JWT
+      const token = await signToken(payload);
+
+      // Set HTTP-only cookie
+      const cookieStore = await cookies();
+      cookieStore.set({
+        name: "bestea-session",
+        value: token,
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 60 * 60 * 24, // 1 day
+      });
+
       return NextResponse.json({
         success: true,
         role: employeeData.role,

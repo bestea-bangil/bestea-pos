@@ -1,6 +1,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@/lib/supabase/server";
 import { getJakartaDate } from "@/lib/date-utils";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +32,8 @@ export async function GET(request: NextRequest) {
     // Get last day of month
     const lastDay = new Date(parseInt(yyyy), parseInt(mm), 0).getDate();
     const endDate = `${yyyy}-${mm}-${lastDay}`;
+
+    const supabase = await createClient();
 
     // 1. Fetch Employees (Role: cashier only)
     let empQuery = supabase.from("employees").select("*").eq("role", "cashier");
@@ -249,6 +251,8 @@ export async function POST(request: NextRequest) {
     const [mm, yyyy] = month.split("-");
     const dbMonth = `${yyyy}-${mm}`;
 
+    const supabase = await createClient();
+
     // Check if record exists
     const { data: existing } = await supabase
       .from("payroll_records")
@@ -333,6 +337,7 @@ export async function DELETE(request: NextRequest) {
     const employeeId = searchParams.get("employee_id");
     const month = searchParams.get("month");
 
+    const supabase = await createClient();
     let query = supabase.from("payroll_records").delete();
 
     if (id && !id.startsWith("draft-")) {

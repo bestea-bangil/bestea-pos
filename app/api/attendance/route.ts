@@ -1,13 +1,6 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase/server";
 import { getJakartaYYYYMMDD } from "@/lib/date-utils";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
-const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: { persistSession: false },
-});
 
 export async function GET(request: Request) {
   try {
@@ -19,6 +12,7 @@ export async function GET(request: Request) {
 
     // Mode: Check Status for specific employee today
     if (checkStatus === "true" && employeeId) {
+       const supabase = await createClient();
        const today = getJakartaYYYYMMDD();
        const { data, error } = await supabase
         .from("attendance_records")
@@ -32,6 +26,7 @@ export async function GET(request: Request) {
     }
 
     // Mode: Fetch All/Filtered Records
+    const supabase = await createClient();
     let query = supabase
       .from("attendance_records")
       .select(`
@@ -120,6 +115,7 @@ export async function POST(request: Request) {
     // Actually, usually we limit to "one per day" or "one open session". 
     // Let's stick to "one per day" to avoid blocking if they forgot to clock out yesterday (that should be auto-closed or handled).
     // But for "clock in reliability", checking strictly by date is fine for CREATION.
+    const supabase = await createClient();
 
     const { data: existing } = await supabase
         .from("attendance_records")
@@ -179,6 +175,7 @@ export async function PUT(request: Request) {
          let recordId = id;
          
          if (!recordId) {
+             const supabase = await createClient();
              // Find LATEST OPEN session for this employee
              const { data: openRecord } = await supabase
                 .from("attendance_records")
@@ -235,6 +232,7 @@ export async function PUT(request: Request) {
          if (notes) updateData.notes = notes;
          if (bodyStatus) updateData.status = bodyStatus;
 
+         const supabase = await createClient();
          const { data, error } = await supabase
             .from("attendance_records")
             .update(updateData)
@@ -246,6 +244,7 @@ export async function PUT(request: Request) {
          return NextResponse.json(data);
 
      } else {
+         const supabase = await createClient();
          // Generic Update (Admin Edit)
          const { data, error } = await supabase
             .from("attendance_records")
@@ -274,6 +273,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: "Missing ID" }, { status: 400 });
     }
 
+    const supabase = await createClient();
     const { error } = await supabase
       .from("attendance_records")
       .delete()

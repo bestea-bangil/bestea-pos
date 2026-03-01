@@ -1,21 +1,11 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
 export const dynamic = 'force-dynamic';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey =
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
-const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    persistSession: false,
-  },
-});
-
 export async function GET() {
   try {
+    const supabase = await createClient();
     const { data, error } = await supabase
       .from("employees")
       .select(`
@@ -59,6 +49,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const supabase = await createClient();
     const body = await request.json();
     const { name, email, phone, role, branch, status, baseSalary, hourlyRate, deductionAmount, pin } = body;
 
@@ -105,6 +96,7 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
     try {
+        const supabase = await createClient();
         const body = await request.json();
         const { id, name, email, phone, role, branch, status, baseSalary, hourlyRate, deductionAmount, pin } = body;
 
@@ -152,6 +144,7 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
     try {
+        const supabase = await createClient();
         const { searchParams } = new URL(request.url);
         const id = searchParams.get("id");
         

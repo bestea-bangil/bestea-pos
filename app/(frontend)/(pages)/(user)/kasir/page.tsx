@@ -68,49 +68,57 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
+import { usePOSCheckout } from "./hooks/usePOSCheckout";
+
 function KasirContent() {
   const router = useRouter();
   const pathname = usePathname();
-  const { currentBranch, logout, activeEmployee, isSuperAdmin } = useBranch();
 
-  const handleLogout = () => {
-    logout();
-    router.push("/login"); // Assumes login route exists
-  };
-
-  // State
-  const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [isDataLoading, setIsDataLoading] = useState(true);
-
-  const [selectedCategory, setSelectedCategory] = useState("all");
-  const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [isCartOpen, setIsCartOpen] = useState(false);
-  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
-
-  // Printer Context
-  const { printReceipt, isConnected } = usePrinter();
-
-  // Product Selection State
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [isSizeModalOpen, setIsSizeModalOpen] = useState(false);
-
-  // Shift State
   const {
+    products,
+    categories,
+    isDataLoading,
+    currentBranch,
+    activeEmployee,
+    isSuperAdmin,
+
+    selectedCategory,
+    setSelectedCategory,
+    cartItems,
+    setCartItems,
+    isCartOpen,
+    setIsCartOpen,
+    isPaymentModalOpen,
+    setIsPaymentModalOpen,
+    selectedProduct,
+    setSelectedProduct,
+    isSizeModalOpen,
+    setIsSizeModalOpen,
+    isShiftModalOpen,
+    setIsShiftModalOpen,
+    isCashOutOpen,
+    setIsCashOutOpen,
+    shiftModalMode,
+    setShiftModalMode,
+
     isShiftOpen,
     shiftData,
-    addTransaction: addTransactionToShift,
-    addExpense,
-    isLoading: isShiftLoading,
-  } = useShift();
-  const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
-  const [isCashOutOpen, setIsCashOutOpen] = useState(false);
-  const [shiftModalMode, setShiftModalMode] = useState<"open" | "close">(
-    "open",
-  );
+    isShiftLoading,
+    totalItems,
+    totalPrice,
+    currentOrderNumber,
+
+    fetchData,
+    handleAddToCart,
+    handleUpdateQuantity,
+    handleRemoveItem,
+    handleConfirmPayment,
+    handleConfirmCashOut,
+    handleConfirmAddToCart,
+  } = usePOSCheckout();
 
   const handleOpenShiftModalCallback = useCallback(() => {
-    setShiftModalMode("close"); // Trigger close shift manually
+    setShiftModalMode("close");
     setIsShiftModalOpen(true);
   }, []);
 
@@ -118,404 +126,23 @@ function KasirContent() {
     setIsCashOutOpen(true);
   }, []);
 
-  // Transaction Context for Syncing
-  const {
-    transactions: allTransactions,
-    addExpense: addTransactionExpense,
-    addTransaction: addTransactionToDB,
-  } = useTransactions();
-
-  // Fetch Data
-  const fetchData = useCallback(async () => {
-    // Only show loading on initial load if products are empty
-    if (products.length === 0) setIsDataLoading(true);
-
-    try {
-      // 1. Try Network First
-      const [prodRes, catRes] = await Promise.all([
-        fetch("/api/products", { cache: "no-store" }),
-        fetch("/api/categories", { cache: "no-store" }),
-      ]);
-
-      if (prodRes.ok) {
-        const pData = await prodRes.json();
-        if (Array.isArray(pData)) {
-          const activeProducts = pData.filter(
-            (p: Product) => p.status === "active",
-          );
-          setProducts(activeProducts);
-
-          // Cache logic (Dynamic Import)
-          const { saveProductsCache } = await import("@/lib/offline-db");
-          saveProductsCache(activeProducts);
-        } else {
-          console.error("Invalid products data", pData);
-          setProducts([]);
-        }
-      }
-      if (catRes.ok) setCategories(await catRes.json());
-    } catch (error) {
-      console.error("Failed to fetch data (Offline fallback?):", error);
-
-      // 2. Offline Fallback
-      if (typeof navigator !== "undefined" && !navigator.onLine) {
-        try {
-          const { getProductsCache } = await import("@/lib/offline-db");
-          const cachedProducts = await getProductsCache();
-          if (cachedProducts && cachedProducts.length > 0) {
-            setProducts(cachedProducts);
-            toast.info("Mode Offline: Menggunakan data produk lokal.");
-
-            // Mock Categories if needed or cache them too (skipping categories cache for now to keep it simple)
-          }
-        } catch (cacheErr) {
-          console.error("Cache load failed", cacheErr);
-        }
-      } else {
-        toast.error("Gagal memuat produk (Koneksi Bermasalah)");
-      }
-    } finally {
-      setIsDataLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  const handleConfirmCashOut = async (amount: number, description: string) => {
-    try {
-      // 1. Add to Shift Data (Local Cashier State)
-      addExpense(amount, description);
-
-      // 2. Sync to Global Transaction Data (Admin Report)
-      await addTransactionExpense({
-        branchId: currentBranch?.id || "unknown",
-        branchName: currentBranch?.name || "Unknown Branch",
-        category: "Operasional", // Default category for Quick Cash Out
-        description: description,
-        amount: amount,
-        recordedBy: activeEmployee?.name || "Kasir",
-        employeeId: activeEmployee?.id,
-        shiftSessionId: shiftData?.sessionId,
-      });
-
-      toast.success("Pengeluaran berhasil dicatat");
-      setIsCashOutOpen(false);
-    } catch (error) {
-      console.error("Failed to record expense:", error);
-      toast.error("Gagal mencatat pengeluaran");
-    }
-  };
-
-  const handleAddToCart = (product: Product) => {
-    // Check if product has variants
-    if (product.variants && product.variants.length > 0) {
-      if (product.variants.length === 1) {
-        handleConfirmAddToCart(product, product.variants[0]);
-      } else {
-        setSelectedProduct(product);
-        setIsSizeModalOpen(true);
-      }
-    } else {
-      // No variants (single price product)
-      const defaultVariant: ProductVariant = {
-        name: "Standard",
-        price: product.price,
-      };
-      handleConfirmAddToCart(product, defaultVariant);
-    }
-  };
-
-  const handleConfirmAddToCart = (
-    product: Product,
-    variant: ProductVariant,
-  ) => {
-    setCartItems((prev) => {
-      const existing = prev.find(
-        (item) => item.id === product.id && item.variant.name === variant.name,
-      );
-
-      if (existing) {
-        return prev.map((item) =>
-          item.id === product.id && item.variant.name === variant.name
-            ? { ...item, quantity: item.quantity + 1 }
-            : item,
-        );
-      }
-
-      const { variants, ...productWithoutVariants } = product;
-      return [
-        ...prev,
-        {
-          ...productWithoutVariants,
-          variant,
-          quantity: 1,
-        },
-      ];
-    });
-  };
-
-  const handleUpdateQuantity = (
-    id: string,
-    change: number,
-    variantName?: string,
-  ) => {
-    setCartItems((prev) =>
-      prev.map((item) => {
-        const isMatch =
-          item.id === id && (!variantName || item.variant.name === variantName);
-
-        if (isMatch) {
-          const newQuantity = item.quantity + change;
-          return newQuantity > 0 ? { ...item, quantity: newQuantity } : item;
-        }
-        return item;
-      }),
-    );
-  };
-
-  const handleRemoveItem = (id: string, variantName?: string) => {
-    setCartItems((prev) =>
-      prev.filter(
-        (item) =>
-          !(
-            item.id === id &&
-            (!variantName || item.variant.name === variantName)
-          ),
-      ),
-    );
-  };
-
   const handleCheckout = () => {
     if (cartItems.length === 0) return;
-    setIsCartOpen(false); // Close mobile cart sheet
+    setIsCartOpen(false);
     setIsPaymentModalOpen(true);
-  };
-
-  const handleConfirmPayment = async (
-    paymentMethod: "cash" | "qris",
-    amountPaid: number,
-  ) => {
-    // Prepare Items for DB
-    const transactionItems = cartItems.map((item) => ({
-      productId: item.id,
-      productName: item.name,
-      variant: item.variant.name,
-      quantity: item.quantity,
-      price: item.variant.price,
-      subtotal: item.variant.price * item.quantity,
-    }));
-
-    // Construct Transaction Object Data
-    const transactionData = {
-      branchId: currentBranch?.id || "unknown",
-      branchName: currentBranch?.name || "Cabang Bestea",
-      cashierId: activeEmployee?.id,
-      cashierName: activeEmployee?.name || "Kasir",
-      customerName: "Pelanggan",
-      totalAmount: totalPrice,
-      paymentMethod: paymentMethod,
-      amountPaid: amountPaid,
-      changeAmount: amountPaid - totalPrice,
-      status: "completed" as const,
-      shiftSessionId: shiftData?.sessionId,
-      items: transactionItems,
-    };
-
-    try {
-      let savedTransaction;
-
-      // SIMULATION MODE: If Super Admin loops simulation (no shift open), do not save to DB
-      if (isSuperAdmin && !isShiftOpen) {
-        console.log("Processing Simulation Transaction (Not Saved to DB)");
-        savedTransaction = {
-          id: `sim-${Date.now()}`,
-          transactionCode: `#SIM-${Math.floor(Math.random() * 1000)
-            .toString()
-            .padStart(3, "0")}`,
-          date: new Date().toISOString(),
-          branchId: currentBranch?.id || "unknown",
-          branchName: currentBranch?.name || "Cabang Bestea",
-          cashierId: activeEmployee?.id,
-          cashierName: activeEmployee?.name || "Super Admin",
-          customerName: "Pelanggan Simulasi",
-          totalAmount: totalPrice,
-          paymentMethod: paymentMethod,
-          amountPaid: amountPaid,
-          changeAmount: amountPaid - totalPrice,
-          status: "completed" as const,
-          items: transactionItems,
-        };
-        toast.info("Mode Simulasi: Transaksi tidak disimpan ke database", {
-          duration: 4000,
-        });
-      } else {
-        // NORMAL MODE: Save to Supabase (Database) via TransactionContext
-        savedTransaction = await addTransactionToDB(
-          transactionData,
-          transactionItems,
-        );
-
-        if (!savedTransaction) {
-          throw new Error("Gagal menyimpan transaksi (API Error)");
-        }
-      }
-
-      if (savedTransaction) {
-        // 2. Add to Local Shift Data (only if shift is open, but for simulation we might want to show it locally?
-        // Actually addTransactionToShift updates the shift state, which might be null if no shift.
-        // But let's try to update UI if possible, or just proceed to print.
-
-        if (isShiftOpen) {
-          const shiftTransaction = {
-            id: savedTransaction.id,
-            transactionCode: savedTransaction.transactionCode,
-            date: new Date(savedTransaction.date).toLocaleDateString("id-ID", {
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-            }),
-            paymentMethod: savedTransaction.paymentMethod as "cash" | "qris",
-            total: savedTransaction.totalAmount,
-            time: new Date(savedTransaction.date).toLocaleTimeString("id-ID", {
-              hour: "2-digit",
-              minute: "2-digit",
-            }),
-            status: (savedTransaction.status === "void"
-              ? "cancelled"
-              : "completed") as "completed" | "pending" | "cancelled",
-            items: savedTransaction.items.map((item: any) => ({
-              productId: item.productId,
-              name: item.productName,
-              price: item.price,
-              quantity: item.quantity,
-              variant: item.variant || "",
-            })),
-            employeeId: savedTransaction.cashierId,
-            employeeName: savedTransaction.cashierName,
-            branchName: savedTransaction.branchName,
-            cashierName: savedTransaction.cashierName,
-          };
-          addTransactionToShift(shiftTransaction);
-        }
-
-        // 3. Stock Reduction (Optimistic / Offline)
-        if (transactionItems.length > 0) {
-          const { saveProductsCache } = await import("@/lib/offline-db");
-
-          setProducts((prevProducts) => {
-            const updatedProducts = prevProducts.map((p) => {
-              // Find all cart items for this product (aggregated if multiple variants)
-              const totalQuantitySold = cartItems
-                .filter((item) => item.id === p.id)
-                .reduce((sum, item) => sum + item.quantity, 0);
-
-              if (totalQuantitySold > 0 && p.trackStock) {
-                return {
-                  ...p,
-                  stock: p.stock - totalQuantitySold,
-                };
-              }
-              return p;
-            });
-
-            // Save to offline cache
-            saveProductsCache(updatedProducts);
-            return updatedProducts;
-          });
-        }
-
-        // 4. Print Receipt
-        // Construct the object expected by printReceipt
-        const receiptData = {
-          ...savedTransaction,
-          // Ensure dates are strings or Date objects as expected by printReceipt
-          // The mock simulation uses ISO string for date, printReceipt probably handles it or needs Date object?
-          // Let's check printReceipt signature or usage.
-          // Previous usage passed `shiftTransaction` which has formatted date/time strings.
-          // Let's create a receipt-compatible object.
-          transactionCode: savedTransaction.transactionCode,
-          date: new Date(savedTransaction.date).toLocaleDateString("id-ID", {
-            day: "numeric",
-            month: "short",
-            year: "numeric",
-          }),
-          time: new Date(savedTransaction.date).toLocaleTimeString("id-ID", {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-          items: savedTransaction.items.map((item: any) => ({
-            productId: item.productId,
-            name: item.productName,
-            price: item.price,
-            quantity: item.quantity,
-            variant: item.variant || "",
-          })),
-          total: savedTransaction.totalAmount, // shiftTransaction uses 'total'
-          cashierName: savedTransaction.cashierName,
-          paymentMethod: savedTransaction.paymentMethod,
-          branchName:
-            savedTransaction.branchName || currentBranch?.name || "Bestea",
-        };
-
-        if (isConnected) {
-          await printReceipt(receiptData);
-        }
-      }
-    } catch (error) {
-      console.error("Transaction failed:", error);
-      toast.error("Transaksi Gagal");
-    }
   };
 
   const handleClosePaymentModal = () => {
     setIsPaymentModalOpen(false);
     setCartItems([]);
-    // Refresh products to show updated stock after transaction
     fetchData();
   };
-
-  const totalItems = cartItems.reduce((acc, item) => acc + item.quantity, 0);
-  const subtotal = cartItems.reduce(
-    (acc, item) => acc + item.variant.price * item.quantity,
-    0,
-  );
-  const totalPrice = subtotal;
 
   const formatter = new Intl.NumberFormat("id-ID", {
     style: "currency",
     currency: "IDR",
     minimumFractionDigits: 0,
   });
-
-  const dailyTransactions = allTransactions.filter(
-    (t) =>
-      new Date(t.date).toDateString() === new Date().toDateString() &&
-      (t.status === "completed" || t.status === "pending"),
-  );
-
-  // Calculate next order number based on highest existing code
-  let nextOrderSeq = 1;
-  const highestCodeTrx = dailyTransactions
-    .filter((t) => t.transactionCode?.startsWith("#"))
-    .sort((a, b) => {
-      const numA = parseInt(a.transactionCode!.replace("#", "") || "0");
-      const numB = parseInt(b.transactionCode!.replace("#", "") || "0");
-      return numB - numA;
-    })[0];
-
-  if (highestCodeTrx?.transactionCode) {
-    const lastNum = parseInt(highestCodeTrx.transactionCode.replace("#", ""));
-    if (!isNaN(lastNum)) {
-      nextOrderSeq = lastNum + 1;
-    }
-  } else if (dailyTransactions.length > 0) {
-    // Fallback if codes aren't #XXX format
-    nextOrderSeq = dailyTransactions.length + 1;
-  }
-
-  const currentOrderNumber = `Order #${String(nextOrderSeq).padStart(3, "0")}`;
 
   if (isShiftLoading || isDataLoading) {
     return (
@@ -524,8 +151,6 @@ function KasirContent() {
       </div>
     );
   }
-
-  const displayCategories = categories;
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-slate-50 rounded-lg border border-slate-200 relative">
@@ -573,7 +198,7 @@ function KasirContent() {
 
           <div className="p-4 md:p-6 pt-0">
             <CategorySelector
-              categories={displayCategories}
+              categories={categories}
               selectedCategory={selectedCategory}
               onSelectCategory={setSelectedCategory}
             />

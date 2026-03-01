@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 
 
@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
     const branchId = searchParams.get("branch_id");
     const employeeId = searchParams.get("employee_id");
 
+    const supabase = await createClient();
     let query = supabase
       .from("shift_schedules")
       .select(`
@@ -73,6 +74,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Upsert - insert or update if exists
+    const supabase = await createClient();
     const { data, error } = await supabase
       .from("shift_schedules")
       .upsert(
@@ -118,6 +120,7 @@ export async function PUT(request: NextRequest) {
 
     // Process each schedule
     const results = [];
+    const supabase = await createClient();
     for (const schedule of schedules) {
       const { employee_id, branch_id, week_start, day_of_week, shift_type, start_time, end_time } = schedule;
 
@@ -168,6 +171,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
+    const supabase = await createClient();
     const { error } = await supabase
       .from("shift_schedules")
       .delete()

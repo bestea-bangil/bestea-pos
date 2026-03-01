@@ -1,4 +1,4 @@
-import { supabaseServer } from './server';
+import { createClient } from './server';
 
 /**
  * Checks if the Supabase database connection is active by performing a lightweight query.
@@ -6,9 +6,10 @@ import { supabaseServer } from './server';
  */
 export async function checkDatabaseConnection(): Promise<boolean> {
   try {
+    const supabase = await createClient();
     // Perform a lightweight query - just counting rows in a small table like 'categories'
     // 'head: true' means we only want the count, not the actual data
-    const { error } = await supabaseServer
+    const { error } = await supabase
       .from('categories')
       .select('count', { count: 'exact', head: true });
 

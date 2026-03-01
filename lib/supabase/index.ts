@@ -1,3 +1,3 @@
 export { supabase } from './client';
-export { supabaseServer } from './server';
+export { createAdminClient, createClient as createServerClient } from './server';
 export * from './types';

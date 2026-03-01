@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { usePathname } from "next/navigation";
+import { useBranch } from "@/contexts/branch-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,6 +43,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 // Types
 interface ProductVariant {
@@ -54,6 +56,7 @@ interface Product {
   name: string;
   category: string;
   categoryId?: string | null;
+  branchId?: string | null;
   price: number | null;
   trackStock: boolean;
   stock: number;
@@ -70,6 +73,8 @@ interface Category {
 
 export default function ProductPage() {
   const pathname = usePathname();
+  const { userRole, currentBranch, branches } = useBranch();
+
   // State
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -77,6 +82,7 @@ export default function ProductPage() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [branchFilter, setBranchFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
 
@@ -90,6 +96,7 @@ export default function ProductPage() {
     name: "",
     category: "",
     categoryId: "",
+    branchId: "",
     price: 0,
     trackStock: true,
     stock: 0,
@@ -144,7 +151,9 @@ export default function ProductPage() {
       .includes(searchQuery.toLowerCase());
     const matchCategory =
       categoryFilter === "all" || prod.category === categoryFilter;
-    return matchSearch && matchCategory;
+    const matchBranch =
+      branchFilter === "all" || prod.branchId === branchFilter;
+    return matchSearch && matchCategory && matchBranch;
   });
 
   const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
@@ -160,6 +169,7 @@ export default function ProductPage() {
         name: prod.name,
         category: prod.category,
         categoryId: prod.categoryId,
+        branchId: prod.branchId || "",
         price: prod.price !== null ? prod.price : "",
         trackStock: prod.trackStock !== undefined ? prod.trackStock : true,
         stock: prod.stock,
@@ -173,6 +183,12 @@ export default function ProductPage() {
         name: "",
         category: "",
         categoryId: "",
+        branchId:
+          userRole !== "super_admin"
+            ? currentBranch?.id || ""
+            : branchFilter !== "all"
+              ? branchFilter
+              : "",
         price: 0,
         trackStock: true,
         stock: 0,
@@ -185,14 +201,20 @@ export default function ProductPage() {
   };
 
   const handleSave = async () => {
-    if (!formData.name || !formData.categoryId) {
-      toast.error("Nama dan Kategori wajib diisi");
+    if (
+      !formData.name ||
+      !formData.categoryId ||
+      (userRole === "super_admin" && !formData.branchId)
+    ) {
+      toast.error("Nama, Kategori, dan Cabang wajib diisi");
       return;
     }
 
     // Prepare payload
     const payload = {
       ...formData,
+      branchId:
+        userRole !== "super_admin" ? currentBranch?.id : formData.branchId,
       price: formData.price === "" ? null : Number(formData.price),
     };
 
@@ -201,6 +223,7 @@ export default function ProductPage() {
       const isUnchanged =
         payload.name === editingProduct.name &&
         payload.categoryId === editingProduct.categoryId &&
+        payload.branchId === editingProduct.branchId &&
         payload.price === editingProduct.price &&
         payload.trackStock === editingProduct.trackStock &&
         payload.stock === editingProduct.stock &&
@@ -300,7 +323,33 @@ export default function ProductPage() {
       </div>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="space-y-4">
+          {userRole === "super_admin" && branches.length > 0 && (
+            <Tabs
+              value={branchFilter}
+              onValueChange={setBranchFilter}
+              className="w-full"
+            >
+              <TabsList className="w-full justify-start h-auto flex-nowrap overflow-x-auto overflow-y-hidden whitespace-nowrap gap-2 bg-transparent p-0 pb-1 scrollbar-hide">
+                <TabsTrigger
+                  value="all"
+                  className="rounded-full data-[state=active]:bg-primary data-[state=active]:text-primary-foreground border bg-muted/50"
+                >
+                  Semua Cabang
+                </TabsTrigger>
+                {branches.map((b) => (
+                  <TabsTrigger
+                    key={b.id}
+                    value={b.id}
+                    className="rounded-full data-[state=active]:bg-primary data-[state=active]:text-primary-foreground border bg-muted/50"
+                  >
+                    {b.name}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          )}
+
           <div className="flex flex-col md:flex-row gap-4 justify-between">
             <div className="flex flex-1 gap-2">
               <div className="relative flex-1">
@@ -382,10 +431,16 @@ export default function ProductPage() {
                     {/* Content */}
                     <CardContent className="p-4 flex-1 flex flex-col gap-3">
                       <div>
-                        <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
                           <span className="text-[10px] uppercase tracking-wider font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-sm">
                             {prod.category}
                           </span>
+                          {userRole === "super_admin" && prod.branchId && (
+                            <span className="text-[10px] font-medium text-slate-500 line-clamp-1 max-w-[120px]">
+                              {branches.find((b) => b.id === prod.branchId)
+                                ?.name || "Unknown"}
+                            </span>
+                          )}
                         </div>
                         <h3
                           className="font-bold text-slate-900 text-base leading-tight line-clamp-2 min-h-[2.5rem] group-hover:text-green-700 transition-colors"
@@ -585,6 +640,30 @@ export default function ProductPage() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {userRole === "super_admin" && (
+                <div className="grid gap-2">
+                  <Label htmlFor="branch">Cabang</Label>
+                  <Select
+                    value={formData.branchId || ""}
+                    onValueChange={(val) =>
+                      setFormData({ ...formData, branchId: val })
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Pilih Cabang" />
+                    </SelectTrigger>
+                    <SelectContent position="popper">
+                      {branches.map((b) => (
+                        <SelectItem key={b.id} value={b.id}>
+                          {b.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
               <div className="grid gap-2">
                 <Label htmlFor="status">Status Produk</Label>
                 <Select

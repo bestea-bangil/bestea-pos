@@ -1,23 +1,17 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-
 
 export const dynamic = 'force-dynamic';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey =
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
-const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    persistSession: false,
-  },
-});
-
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const { data, error } = await supabase
+    const supabase = await createClient();
+    const { searchParams } = new URL(request.url);
+    const queryBranchId = searchParams.get("branch_id");
+    const headerBranchId = request.headers.get("x-branch-id");
+    const userRole = request.headers.get("x-user-role");
+
+    let query = supabase
       .from("products")
       .select(`
         *,
@@ -26,13 +20,23 @@ export async function GET() {
       `)
       .order("name");
 
+    // If branch_admin or cashier, restrict to their branch
+    if (userRole !== "super_admin" && headerBranchId) {
+      query = query.eq("branch_id", headerBranchId);
+    } else if (queryBranchId) {
+      // Super admin can filter by branch
+      query = query.eq("branch_id", queryBranchId);
+    }
+
+    const { data, error } = await query;
     if (error) throw error;
 
-    const formatted = (data || []).map((p) => ({
+    const formatted = (data || []).map((p: any) => ({
       id: p.id,
       name: p.name,
       category: p.categories?.name || "",
       categoryId: p.category_id,
+      branchId: p.branch_id,
       price: p.price !== null ? Number(p.price) : null,
       trackStock: p.track_stock,
       stock: p.stock,
@@ -52,8 +56,17 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const supabase = await createClient();
     const body = await request.json();
-    const { name, categoryId, price, trackStock, stock, image, status, variants } = body;
+    const { name, categoryId, branchId, price, trackStock, stock, image, status, variants } = body;
+
+    const userRole = request.headers.get("x-user-role");
+    const headerBranchId = request.headers.get("x-branch-id");
+
+    let effectiveBranchId = branchId;
+    if (userRole !== "super_admin" && headerBranchId) {
+      effectiveBranchId = headerBranchId;
+    }
 
     // 2. Insert Product
     const { data: product, error } = await supabase
@@ -61,6 +74,7 @@ export async function POST(request: Request) {
       .insert([{
         name,
         category_id: categoryId,
+        branch_id: effectiveBranchId,
         price,
         track_stock: trackStock,
         stock,
@@ -91,8 +105,17 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
     try {
+        const supabase = await createClient();
         const body = await request.json();
-        const { id, name, categoryId, price, trackStock, stock, image, status, variants } = body;
+        const { id, name, categoryId, branchId, price, trackStock, stock, image, status, variants } = body;
+
+        const userRole = request.headers.get("x-user-role");
+        const headerBranchId = request.headers.get("x-branch-id");
+
+        let effectiveBranchId = branchId;
+        if (userRole !== "super_admin" && headerBranchId) {
+            effectiveBranchId = headerBranchId;
+        }
 
         // 2. Update Product
         const { error } = await supabase
@@ -100,6 +123,7 @@ export async function PUT(request: Request) {
             .update({
                 name,
                 category_id: categoryId,
+                branch_id: effectiveBranchId,
                 price,
                 track_stock: trackStock,
                 stock,
@@ -132,6 +156,7 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
     try {
+        const supabase = await createClient();
         const { searchParams } = new URL(request.url);
         const id = searchParams.get("id");
         

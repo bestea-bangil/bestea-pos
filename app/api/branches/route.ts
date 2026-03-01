@@ -1,20 +1,9 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-
-// Initialize Supabase Client with Service Role Key
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey =
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
-const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    persistSession: false,
-  },
-});
 
 export async function GET() {
   try {
+    const supabase = await createClient();
     const { data, error } = await supabase
       .from("branches")
       .select("*")
@@ -24,6 +13,7 @@ export async function GET() {
 
     return NextResponse.json(data);
   } catch (error) {
+    console.error("GET /api/branches error:", error);
     return NextResponse.json(
       { error: "Failed to fetch branches" },
       { status: 500 }
@@ -33,6 +23,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const supabase = await createClient();
     const body = await request.json();
     const { name, type, email, address, phone } = body;
 
@@ -55,6 +46,7 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
+    const supabase = await createClient();
     const body = await request.json();
     const { id, ...updates } = body;
 
@@ -82,6 +74,7 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
     try {
+        const supabase = await createClient();
         const { searchParams } = new URL(request.url);
         const id = searchParams.get('id');
 

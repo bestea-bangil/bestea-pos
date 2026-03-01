@@ -12,51 +12,25 @@ interface AuthGuardProps {
 export function AuthGuard({ children, allowedRoles }: AuthGuardProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const { userRole } = useBranch();
+  const { userRole, isLoading } = useBranch();
   const [isAuthorized, setIsAuthorized] = useState(false);
 
   useEffect(() => {
-    // If context is strictly loading, wait?
-    // Actually BranchContext sets isLoaded=true after mounting and reading storage.
-    // We should wait for that.
-
-    // Check localStorage directly for faster initial check to avoid flash?
-    // But BranchContext is the source of truth for app state.
-    // Let's rely on BranchContext but maybe add a local check if needed.
-
     const checkAuth = () => {
-      const storedAuth = localStorage.getItem("bestea-auth-session");
+      // Don't act while still hydrating context
+      if (isLoading) return;
 
-      // No session? -> Login
-      if (!storedAuth) {
+      // 1. Not logged in
+      if (userRole === "guest" || !userRole) {
         if (pathname !== "/login") {
           router.push("/login");
         }
         return;
       }
 
-      let role: RoleType = "guest"; // BETTER DEFAULT
-      try {
-        const parsed = JSON.parse(storedAuth);
-        role = parsed.role;
-      } catch (e) {
-        router.push("/login");
-        return;
-      }
-
-      // If role is guest (invalid session), force login
-      if (role === "guest") {
-        if (pathname !== "/login") {
-          router.push("/login");
-        }
-        return;
-      }
-
-      // If allowedRoles is specified, check if user has role
-      if (allowedRoles && !allowedRoles.includes(role)) {
-        // Unauthorized for this specific page
-        // Redirect based on their actual role
-        if (role === "cashier") {
+      // 3. Logged in, check if allowed
+      if (allowedRoles && !allowedRoles.includes(userRole)) {
+        if (userRole === "cashier") {
           router.push("/kasir");
         } else {
           router.push("/dashboard");
@@ -64,16 +38,14 @@ export function AuthGuard({ children, allowedRoles }: AuthGuardProps) {
         return;
       }
 
-      // Authorized
       setIsAuthorized(true);
     };
 
-    // Run check
     checkAuth();
-  }, [router, pathname, allowedRoles, userRole]);
+  }, [router, pathname, allowedRoles, userRole, isLoading]);
 
-  // While checking, show nothing or loading
-  if (!isAuthorized) {
+  // While checking or loading from context, show nothing
+  if (isLoading || !isAuthorized) {
     return null; // Or a loading spinner
   }
 

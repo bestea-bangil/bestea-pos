@@ -155,7 +155,30 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
         }),
       );
 
-      setTransactions(formattedTransactions);
+      let combinedTransactions = formattedTransactions;
+
+      // Merge Offline Transactions
+      if (typeof navigator !== "undefined") {
+        try {
+          const { getPendingTransactions } = await import("@/lib/offline-db");
+          const offlineTx = await getPendingTransactions();
+          const formattedOfflineTx = offlineTx.map((tx: any) => ({
+            ...tx,
+            isOffline: true,
+          }));
+
+          // Filter out offline transactions that might have synced but aren't deleted yet
+          // (Or just prepend them all)
+          combinedTransactions = [
+            ...formattedOfflineTx,
+            ...formattedTransactions,
+          ];
+        } catch (e) {
+          console.error("Failed to load offline transactions", e);
+        }
+      }
+
+      setTransactions(combinedTransactions);
     } catch (error) {}
   }, []);
 
@@ -194,7 +217,20 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
         }),
       );
 
-      setExpenses(formattedExpenses);
+      let combinedExpenses = formattedExpenses;
+
+      // Merge Offline Expenses
+      if (typeof navigator !== "undefined") {
+        try {
+          const { getPendingExpenses } = await import("@/lib/offline-db");
+          const offlineExp = await getPendingExpenses();
+          combinedExpenses = [...offlineExp, ...formattedExpenses];
+        } catch (e) {
+          console.error("Failed to load offline expenses", e);
+        }
+      }
+
+      setExpenses(combinedExpenses);
     } catch (error) {}
   }, []);
 
@@ -213,11 +249,6 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (lastSynced) {
-      console.log(
-        "Sync completed at",
-        lastSynced,
-        "- Refetching transactions...",
-      );
       fetchTransactions();
       fetchExpenses();
     }
@@ -382,6 +413,13 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
 
   const voidTransaction = useCallback(
     async (id: string) => {
+      if (id.includes("offline")) {
+        // Cannot void an offline transaction that hasn't synced
+        throw new Error(
+          "Tidak dapat membatalkan transaksi offline. Harap sinkronkan terlebih dahulu.",
+        );
+      }
+
       const { error } = await supabase
         .from("transactions")
         .update({ status: "void" })

@@ -117,6 +117,8 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
         console.error("Failed to parse session", e);
       }
     }
+
+    setIsLoading(false);
   }, []);
 
   // Effect to sync currentBranch when branches are loaded and we have a session branchId
@@ -550,7 +552,14 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
-  const logout = React.useCallback(() => {
+  const logout = React.useCallback(async () => {
+    // 1. Call API to clear HttpOnly cookie
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch (e) {
+      console.error("Failed to call logout API", e);
+    }
+
     setUserRole("guest");
     setCurrentBranch(null);
     setActiveEmployee(null);

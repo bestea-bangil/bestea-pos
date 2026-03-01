@@ -1,6 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
+import { signToken } from "@/lib/jwt";
+import { cookies } from "next/headers";
 
 export const dynamic = 'force-dynamic';
 
@@ -89,6 +91,27 @@ export async function POST(request: Request) {
       branchId: foundEmployee.branch_id,
       avatar_url: foundEmployee.avatar_url,
     };
+
+    // Generate JWT
+    const payload = {
+      employeeId: foundEmployee.id,
+      role: foundEmployee.role,
+      branchId: foundEmployee.branch_id,
+    };
+    
+    const token = await signToken(payload);
+
+    // Set HTTP-only cookie
+    const cookieStore = await cookies();
+    cookieStore.set({
+      name: "bestea-session",
+      value: token,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24, // 1 day
+    });
 
     return NextResponse.json(formatted);
 

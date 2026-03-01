@@ -1,24 +1,17 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
-
-// Initialize Supabase Client with Service Role Key for admin privileges (bypass RLS)
-// Fallback to Anon Key if Service Role not found (though Service Role is recommended for backend)
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
-const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    persistSession: false,
-  },
-});
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const shiftSessionId = searchParams.get("shiftSessionId");
   const branchId = searchParams.get("branchId");
+  const limitParam = searchParams.get("limit");
+  const pageParam = searchParams.get("page");
 
   try {
+    const supabase = await createClient();
     let query = supabase
       .from("transactions")
       .select(`
@@ -38,11 +31,20 @@ export async function GET(request: Request) {
 
     if (shiftSessionId) {
       query = query.eq("shift_session_id", shiftSessionId);
-    } else if (branchId) {
+    } else if (branchId && branchId !== "all") {
       query = query.eq("branch_id", branchId);
     }
 
-    const { data, error } = await query;
+    // Apply Pagination
+    if (limitParam) {
+      const limit = parseInt(limitParam, 10);
+      const page = pageParam ? parseInt(pageParam, 10) : 1;
+      const from = (page - 1) * limit;
+      const to = from + limit - 1;
+      query = query.range(from, to);
+    }
+
+    const { data, error, count } = await query;
 
     if (error) {
       console.error("Supabase Transaction Fetch Error:", error);
@@ -71,6 +73,7 @@ export async function POST(request: Request) {
     const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
 
+    const supabase = await createClient();
     const { data: lastTrx } = await supabase
       .from("transactions")
       .select("transaction_code")
