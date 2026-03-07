@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/server";
 
 export const dynamic = 'force-dynamic';
 
@@ -13,7 +13,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Branch ID required" }, { status: 400 });
     }
 
-    const supabase = await createClient();
+    const supabase = await createAdminClient();
     let query = supabase
       .from("shift_sessions")
       .select(`
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { branchId, employeeId, initialCash } = body;
-    const supabase = await createClient();
+    const supabase = await createAdminClient();
 
     // Check if there is already an open shift for this branch
     const { data: existing } = await supabase
@@ -86,7 +86,7 @@ export async function PUT(request: Request) {
   try {
     const body = await request.json();
     const { id, employeeId, actualCash, expectedCash, notes } = body;
-    const supabase = await createClient();
+    const supabase = await createAdminClient();
 
     const discrepancy = actualCash - expectedCash;
 

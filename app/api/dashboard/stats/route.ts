@@ -20,8 +20,13 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const branchId = searchParams.get("branchId");
+    const branchIdParam = searchParams.get("branchId");
     const period = searchParams.get("period") || "today";
+
+    let branchIdFilter = null;
+    if (branchIdParam && branchIdParam !== 'all' && branchIdParam !== 'Semua Cabang') {
+         branchIdFilter = branchIdParam;
+    }
 
     // Get Today in Jakarta (YYYY-MM-DD)
     const todayStr = getJakartaYYYYMMDD();
@@ -87,8 +92,8 @@ export async function GET(request: Request) {
       .lte("created_at", end.toISOString())
       .eq("status", "completed");
 
-    if (branchId && branchId !== "all") {
-      query = query.eq("branch_id", branchId);
+    if (branchIdParam && branchIdParam !== "all") {
+      query = query.eq("branch_id", branchIdParam);
     }
 
     const { data: transactions, error: trxError } = await query;
@@ -101,8 +106,8 @@ export async function GET(request: Request) {
       .gte("created_at", start.toISOString())
       .lte("created_at", end.toISOString());
 
-    if (branchId && branchId !== "all") {
-      expenseQuery = expenseQuery.eq("branch_id", branchId);
+    if (branchIdParam && branchIdParam !== "all") {
+      expenseQuery = expenseQuery.eq("branch_id", branchIdParam);
     }
 
     const { data: expenses, error: expError } = await expenseQuery;
@@ -121,8 +126,8 @@ export async function GET(request: Request) {
       .lte("created_at", prevEnd.toISOString())
       .eq("status", "completed");
 
-    if (branchId && branchId !== "all") {
-      prevQuery = prevQuery.eq("branch_id", branchId);
+    if (branchIdParam && branchIdParam !== "all") {
+      prevQuery = prevQuery.eq("branch_id", branchIdParam);
     }
     const { data: prevTransactions } = await prevQuery;
 
@@ -280,7 +285,7 @@ export async function GET(request: Request) {
       branchPerformance,
       chartData,
       period,
-      branchId
+      branchIdParam
     });
 
   } catch (error) {

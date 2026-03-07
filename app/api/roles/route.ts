@@ -1,12 +1,11 @@
-
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    const supabase = await createClient();
+    const supabase = await createAdminClient();
     const { data, error } = await supabase
       .from("roles")
       .select("*")
@@ -21,7 +20,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient();
+    const supabase = await createAdminClient();
     const body = await request.json();
     const { name, description, perms, color } = body;
 
@@ -40,7 +39,7 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const supabase = await createClient();
+    const supabase = await createAdminClient();
     const body = await request.json();
     const { id, name, description, perms, color } = body;
 
@@ -58,7 +57,7 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const supabase = await createClient();
+    const supabase = await createAdminClient();
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
     if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });

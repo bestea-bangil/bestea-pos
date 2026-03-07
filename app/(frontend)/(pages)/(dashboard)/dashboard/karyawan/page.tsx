@@ -568,7 +568,7 @@ export default function KaryawanPage() {
       </Card>
 
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="!max-w-lg">
           <DialogHeader>
             <DialogTitle>
               {editingEmployee ? "Edit Karyawan" : "Tambah Karyawan Baru"}
@@ -655,7 +655,10 @@ export default function KaryawanPage() {
                   value={formData.role}
                   onValueChange={(v) => setFormData({ ...formData, role: v })}
                 >
-                  <SelectTrigger id="role" className="w-full">
+                  <SelectTrigger
+                    id="role"
+                    className="w-full [&>span]:truncate text-left"
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent position="popper">
@@ -675,7 +678,10 @@ export default function KaryawanPage() {
                     setFormData({ ...formData, branchId: v })
                   }
                 >
-                  <SelectTrigger id="branch" className="w-full">
+                  <SelectTrigger
+                    id="branch"
+                    className="w-full [&>span]:truncate text-left pr-3"
+                  >
                     <SelectValue placeholder="Pilih Cabang" />
                   </SelectTrigger>
                   <SelectContent position="popper">

@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
 export const dynamic = 'force-dynamic';
@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   const pageParam = searchParams.get("page");
 
   try {
-    const supabase = await createClient();
+    const supabase = await createAdminClient();
     let query = supabase
       .from("transactions")
       .select(`
@@ -73,7 +73,7 @@ export async function POST(request: Request) {
     const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
 
-    const supabase = await createClient();
+    const supabase = await createAdminClient();
     const { data: lastTrx } = await supabase
       .from("transactions")
       .select("transaction_code")
