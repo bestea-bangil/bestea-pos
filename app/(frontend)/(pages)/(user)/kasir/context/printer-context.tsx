@@ -116,6 +116,10 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
   const connect = async () => {
     if (!isSupported) {
       setError("Web Bluetooth is not supported in this browser.");
+      toast.error("Browser tidak mendukung", {
+        description:
+          "Silakan gunakan Chrome (Android/PC). iOS Safari belum mendukung fitur ini.",
+      });
       return;
     }
 
