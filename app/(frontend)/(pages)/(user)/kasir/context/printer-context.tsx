@@ -326,8 +326,6 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
 
       // Footer
       encoder.align("center");
-      encoder.line("Ikut rekening pak aan(pak said)");
-      encoder.separator("-");
       encoder.newline();
 
       encoder.line("Terima kasih");
