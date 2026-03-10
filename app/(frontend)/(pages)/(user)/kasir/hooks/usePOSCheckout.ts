@@ -277,7 +277,7 @@ export function usePOSCheckout() {
 
   // Get Order Number logic
   const dailyTransactions = allTransactions.filter((t) =>
-    new Date(t.date).toDateString() === new Date().toDateString() && (t.status === "completed" || t.status === "pending")
+    new Date(t.date).toDateString() === new Date().toDateString()
   );
 
   let nextOrderSeq = 1;

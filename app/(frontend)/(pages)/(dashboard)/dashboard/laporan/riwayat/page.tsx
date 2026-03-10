@@ -37,7 +37,7 @@ import { useTransactions } from "@/app/context/transaction-context";
 import { useBranch } from "@/contexts/branch-context";
 
 export default function RiwayatPage() {
-  const { branches } = useBranch();
+  const { branches, isLoading } = useBranch();
   const [selectedBranch, setSelectedBranch] = useState("all");
   const [dateRange, setDateRange] = useState("Hari Ini");
   const [searchQuery, setSearchQuery] = useState("");
@@ -236,11 +236,15 @@ export default function RiwayatPage() {
             </SelectTrigger>
             <SelectContent position="popper">
               <SelectItem value="all">Semua Cabang</SelectItem>
-              {branches.map((b) => (
-                <SelectItem key={b.id} value={b.id}>
-                  {b.name}
-                </SelectItem>
-              ))}
+              {isLoading ? (
+                <SelectItem value="loading" disabled>Loading...</SelectItem>
+              ) : (
+                branches.map((b) => (
+                  <SelectItem key={b.id} value={b.id}>
+                    {b.name}
+                  </SelectItem>
+                ))
+              )}
             </SelectContent>
           </Select>
         </div>
