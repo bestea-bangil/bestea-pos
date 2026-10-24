@@ -119,6 +119,7 @@ export default function KaryawanPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [visiblePins, setVisiblePins] = useState<Record<string, boolean>>({});
 
   const togglePinVisibility = (id: string) => {
@@ -259,21 +260,64 @@ export default function KaryawanPage() {
     }
   };
 
+  const handleDeactivate = async (id: string, name?: string) => {
+    try {
+      const res = await fetch("/api/employees", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, status: "inactive" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Gagal menonaktifkan karyawan");
+      toast.success(
+        name
+          ? `Karyawan "${name}" berhasil dinonaktifkan`
+          : "Karyawan berhasil dinonaktifkan",
+      );
+      fetchData();
+    } catch (err: any) {
+      console.error("Deactivate error:", err);
+      toast.error(err.message || "Gagal menonaktifkan karyawan");
+    }
+  };
+
   const handleDelete = async () => {
     if (!deleteId) return;
+    const targetEmp = employees.find((e) => e.id === deleteId);
+    setIsDeleting(true);
 
     try {
       const res = await fetch(`/api/employees?id=${deleteId}`, {
         method: "DELETE",
       });
-      if (!res.ok) throw new Error("Failed to delete");
+      const data = await res.json().catch(() => ({}));
 
-      toast.success("Karyawan berhasil dihapus");
+      if (!res.ok) {
+        if (data.code === "FOREIGN_KEY_VIOLATION" || res.status === 409) {
+          toast.error("Tidak dapat menghapus permanen", {
+            description:
+              data.error ||
+              "Karyawan memiliki riwayat transaksi/shift kasir. Silakan nonaktifkan akunnya.",
+            action: {
+              label: "Nonaktifkan",
+              onClick: () => handleDeactivate(deleteId, targetEmp?.name),
+            },
+            duration: 9000,
+          });
+          setDeleteId(null);
+          return;
+        }
+        throw new Error(data.error || "Gagal menghapus karyawan");
+      }
+
+      toast.success("Karyawan berhasil dihapus permanen");
       setDeleteId(null);
       fetchData();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Delete error:", error);
-      toast.error("Gagal menghapus karyawan");
+      toast.error(error.message || "Gagal menghapus karyawan");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -779,25 +823,63 @@ export default function KaryawanPage() {
       </Dialog>
       <Dialog
         open={!!deleteId}
-        onOpenChange={(open) => !open && setDeleteId(null)}
+        onOpenChange={(open) => !open && !isDeleting && setDeleteId(null)}
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Apakah Anda yakin?</DialogTitle>
-            <DialogDescription>
-              Tindakan ini tidak dapat dibatalkan. Menghapus karyawan juga akan{" "}
-              <span className="font-bold text-red-600">
-                MENGHAPUS AKUN LOGIN
-              </span>{" "}
-              mereka secara permanen.
+            <DialogTitle>Konfirmasi Hapus Karyawan</DialogTitle>
+            <DialogDescription className="space-y-2 pt-1 text-left">
+              <span>
+                Apakah Anda yakin ingin menghapus{" "}
+                <span className="font-semibold text-foreground">
+                  {employees.find((e) => e.id === deleteId)?.name}
+                </span>
+                ? Tindakan ini tidak dapat dibatalkan.
+              </span>
+              <span className="block text-xs text-amber-700 bg-amber-50 p-2.5 rounded-md border border-amber-200 leading-relaxed">
+                <strong>Catatan:</strong> Karyawan yang sudah memiliki riwayat
+                transaksi kasir, absensi, atau shift tidak dapat dihapus permanen
+                demi keamanan laporan keuangan. Disarankan untuk memilih{" "}
+                <strong>Nonaktifkan</strong>.
+              </span>
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteId(null)}>
+          <DialogFooter className="flex-col sm:flex-row gap-2 mt-2">
+            <Button
+              variant="outline"
+              onClick={() => setDeleteId(null)}
+              disabled={isDeleting}
+            >
               Batal
             </Button>
-            <Button variant="destructive" onClick={handleDelete}>
-              Ya, Hapus Permanen
+            {employees.find((e) => e.id === deleteId)?.status === "active" && (
+              <Button
+                variant="secondary"
+                disabled={isDeleting}
+                onClick={() => {
+                  const emp = employees.find((e) => e.id === deleteId);
+                  if (deleteId) {
+                    handleDeactivate(deleteId, emp?.name);
+                    setDeleteId(null);
+                  }
+                }}
+              >
+                Nonaktifkan Saja
+              </Button>
+            )}
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Menghapus...
+                </>
+              ) : (
+                "Ya, Hapus Permanen"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

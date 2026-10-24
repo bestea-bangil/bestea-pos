@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
 export const dynamic = 'force-dynamic';
@@ -96,7 +96,7 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
     try {
-        const supabase = await createClient();
+        const supabase = await createAdminClient();
         const body = await request.json();
         const { id, name, email, phone, role, branch, status, baseSalary, hourlyRate, deductionAmount, pin } = body;
 
@@ -112,17 +112,16 @@ export async function PUT(request: Request) {
            if(bData) branchId = bData.id;
         }
 
-        const updateData: any = {
-            name,
-            email,
-            phone,
-            role: roleMap[role] || role, // Use map or raw role name (for new roles)
-            branch_id: branchId,
-            status,
-            base_salary: baseSalary,
-            hourly_rate: hourlyRate,
-            deduction_amount: deductionAmount || 0,
-        };
+        const updateData: any = {};
+        if (name !== undefined) updateData.name = name;
+        if (email !== undefined) updateData.email = email;
+        if (phone !== undefined) updateData.phone = phone;
+        if (role !== undefined) updateData.role = roleMap[role] || role;
+        if (branchId !== undefined) updateData.branch_id = branchId;
+        if (status !== undefined) updateData.status = status;
+        if (baseSalary !== undefined) updateData.base_salary = baseSalary;
+        if (hourlyRate !== undefined) updateData.hourly_rate = hourlyRate;
+        if (deductionAmount !== undefined) updateData.deduction_amount = deductionAmount || 0;
 
         // Only update PIN if it's provided and not the placeholder
         if (pin && pin !== "****") {
@@ -136,26 +135,36 @@ export async function PUT(request: Request) {
 
         if (error) throw error;
         return NextResponse.json({ success: true });
-    } catch (error) {
+    } catch (error: any) {
         console.error("[API Employees] Update Error:", error);
-        return NextResponse.json({ error: "Failed to update employee" }, { status: 500 });
+        return NextResponse.json({ error: error?.message || "Failed to update employee" }, { status: 500 });
     }
 }
 
 export async function DELETE(request: Request) {
     try {
-        const supabase = await createClient();
+        const supabase = await createAdminClient();
         const { searchParams } = new URL(request.url);
         const id = searchParams.get("id");
         
         if(!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
 
         const { error } = await supabase.from("employees").delete().eq("id", id);
-        if (error) throw error;
+        if (error) {
+            // Foreign key violation (e.g. referenced in transactions, shift_sessions, expenses, shifts)
+            if (error.code === "23503" || error.message?.toLowerCase().includes("foreign key")) {
+                return NextResponse.json({ 
+                    error: "Karyawan memiliki riwayat transaksi/shift sehingga tidak dapat dihapus permanen demi integritas laporan keuangan. Silakan nonaktifkan karyawan.",
+                    code: "FOREIGN_KEY_VIOLATION",
+                    details: error.details,
+                }, { status: 409 });
+            }
+            throw error;
+        }
 
         return NextResponse.json({ success: true });
-    } catch (error) {
+    } catch (error: any) {
          console.error("[API Employees] Delete Error:", error);
-         return NextResponse.json({ error: "Failed to delete employee" }, { status: 500 });
+         return NextResponse.json({ error: error?.message || "Failed to delete employee" }, { status: 500 });
     }
 }
